@@ -247,10 +247,10 @@ index a84fef2..e3ccd25 100644
      evict_texture_object(reader.read<u32>());
    } else if (subCmd == GX_AURORA_DESTROY_TLUT) {
 diff --git a/lib/gx/gx.cpp b/lib/gx/gx.cpp
-index b12b327..97b6cc8 100644
+index b12b327..d46de0c 100644
 --- a/lib/gx/gx.cpp
 +++ b/lib/gx/gx.cpp
-@@ -108,6 +108,23 @@ wgpu::CompareFunction to_compare_function(GXCompare func) {
+@@ -108,6 +108,22 @@ wgpu::CompareFunction to_compare_function(GXCompare func) {
    }
  }
  
@@ -270,11 +270,10 @@ index b12b327..97b6cc8 100644
 +    return wgpu::StencilOperation::Keep;
 +  }
 +}
-+
  wgpu::BlendState to_blend_state(GXBlendMode mode, GXBlendFactor srcFac, GXBlendFactor dstFac, GXLogicOp op,
                                  u32 dstAlpha) {
    wgpu::BlendComponent colorBlendComponent;
-@@ -319,10 +336,23 @@ wgpu::RenderPipeline build_pipeline(const PipelineConfig& config, ArrayRef<wgpu:
+@@ -319,10 +335,23 @@ wgpu::RenderPipeline build_pipeline(const PipelineConfig& config, ArrayRef<wgpu:
    const float depthBias = (UseReversedZ ? -1.0f : 1.0f) * std::bit_cast<float>(config.polygonOffsetBits);
    const float depthBiasSlopeScale = (UseReversedZ ? -1.0f : 1.0f) * std::bit_cast<float>(config.polygonOffsetScaleBits);
    const float depthBiasClamp = webgpu::g_hasCoreFeatures ? std::bit_cast<float>(config.polygonOffsetClampBits) : 0.0f;
@@ -298,7 +297,7 @@ index b12b327..97b6cc8 100644
        .depthBias = round_away_from_zero<int32_t>(depthBias),
        .depthBiasSlopeScale = depthBiasSlopeScale,
        .depthBiasClamp = depthBiasClamp,
-@@ -464,6 +494,14 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
+@@ -464,6 +493,14 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
        .depthUpdate = g_gxState.depthUpdate,
        .alphaUpdate = g_gxState.alphaUpdate,
        .colorUpdate = g_gxState.colorUpdate,
@@ -456,10 +455,10 @@ index 9fc6703..be33f47 100644
  
  } // namespace aurora::rmlui
 diff --git a/lib/webgpu/gpu.cpp b/lib/webgpu/gpu.cpp
-index 592b8ab..2517240 100644
+index 592b8ab..4a4cf7e 100644
 --- a/lib/webgpu/gpu.cpp
 +++ b/lib/webgpu/gpu.cpp
-@@ -69,6 +69,8 @@ bool g_bcTexturesSupported = false;
+@@ -69,10 +69,68 @@ bool g_bcTexturesSupported = false;
  bool g_astcTexturesSupported = false;
  bool g_textureComponentSwizzleSupported = false;
  static std::atomic_bool g_initialized = false;
@@ -468,7 +467,67 @@ index 592b8ab..2517240 100644
  static std::atomic_bool g_vsyncEnabled = true;
  
  namespace {
-@@ -384,6 +386,13 @@ static TextureWithSampler create_depth_texture(uint32_t width, uint32_t height)
+ 
++#ifdef WEBGPU_DAWN
++// Dawn's C cache-callback ABI differs between packages: older ones pass a single
++// userdata pointer, newer ones two. Both generations expose the same public C
++// descriptor fields, so the callbacks are wired through those and the matching
++// signature pair is selected at compile time (template specialization keeps the
++// unused pair out of the compilation entirely).
++static size_t dawn_load_cache_cb_6(size_t keySize, const uint8_t* key, size_t valueSize, uint8_t* value,
++                                   void* userdata1, void* userdata2) {
++  return load_from_cache(key, keySize, value, valueSize, userdata1 != nullptr ? userdata1 : userdata2);
++}
++static void dawn_store_cache_cb_6(size_t keySize, const uint8_t* key, size_t valueSize, const uint8_t* value,
++                                  void* userdata1, void* userdata2) {
++  store_to_cache(key, keySize, value, valueSize, userdata1 != nullptr ? userdata1 : userdata2);
++}
++static size_t dawn_load_cache_cb_5(size_t keySize, const uint8_t* key, size_t valueSize, uint8_t* value,
++                                   void* userdata) {
++  return load_from_cache(key, keySize, value, valueSize, userdata);
++}
++static void dawn_store_cache_cb_5(size_t keySize, const uint8_t* key, size_t valueSize, const uint8_t* value,
++                                  void* userdata) {
++  store_to_cache(key, keySize, value, valueSize, userdata);
++}
++template <typename T, typename = void>
++struct HasLegacyCacheCallbacks : std::false_type {};
++template <typename T>
++struct HasLegacyCacheCallbacks<T, std::void_t<decltype(std::declval<T&>().loadDataFunction),
++                                              decltype(std::declval<T&>().storeDataFunction)>>
++    : std::true_type {};
++template <typename T>
++struct PointedFunction;
++template <typename R, typename... A>
++struct PointedFunction<R (*)(A...)> {
++  using type = R (*)(A...);
++};
++template <bool Legacy, typename LoadCallback, typename StoreCallback>
++struct CacheCallbackPair;
++template <typename LoadCallback, typename StoreCallback>
++struct CacheCallbackPair<true, LoadCallback, StoreCallback> {
++  static void assign(WGPUDawnCacheDeviceDescriptor& descriptor) {
++    descriptor.dawnLoadCacheDataCallbackInfo.callback =
++        reinterpret_cast<LoadCallback>(dawn_load_cache_cb_5);
++    descriptor.dawnStoreCacheDataCallbackInfo.callback =
++        reinterpret_cast<StoreCallback>(dawn_store_cache_cb_5);
++  }
++};
++template <typename LoadCallback, typename StoreCallback>
++struct CacheCallbackPair<false, LoadCallback, StoreCallback> {
++  static void assign(WGPUDawnCacheDeviceDescriptor& descriptor) {
++    descriptor.dawnLoadCacheDataCallbackInfo.callback =
++        reinterpret_cast<LoadCallback>(dawn_load_cache_cb_6);
++    descriptor.dawnStoreCacheDataCallbackInfo.callback =
++        reinterpret_cast<StoreCallback>(dawn_store_cache_cb_6);
++  }
++};
++#endif
++
+ AuroraLogLevel wgpu_log_level(wgpu::LoggingType type) {
+   switch (type) {
+   case wgpu::LoggingType::Verbose:
+@@ -384,6 +442,13 @@ static TextureWithSampler create_depth_texture(uint32_t width, uint32_t height)
    };
    auto view = texture.CreateView(&viewDescriptor);
  
@@ -482,7 +541,7 @@ index 592b8ab..2517240 100644
    const wgpu::SamplerDescriptor samplerDescriptor{
        .label = "Depth sampler",
        .addressModeU = wgpu::AddressMode::ClampToEdge,
-@@ -404,6 +413,7 @@ static TextureWithSampler create_depth_texture(uint32_t width, uint32_t height)
+@@ -404,6 +469,7 @@ static TextureWithSampler create_depth_texture(uint32_t width, uint32_t height)
        .size = size,
        .format = format,
        .sampler = std::move(sampler),
@@ -490,7 +549,7 @@ index 592b8ab..2517240 100644
    };
  }
  
-@@ -893,6 +903,7 @@ bool initialize(AuroraBackend auroraBackend, bool allowCpu) {
+@@ -893,6 +959,7 @@ bool initialize(AuroraBackend auroraBackend, bool allowCpu) {
      g_bcTexturesSupported = false;
      g_astcTexturesSupported = false;
      g_textureComponentSwizzleSupported = false;
@@ -498,7 +557,7 @@ index 592b8ab..2517240 100644
      wgpu::SupportedFeatures supportedFeatures;
      g_adapter.GetFeatures(&supportedFeatures);
      for (size_t i = 0; i < supportedFeatures.featureCount; ++i) {
-@@ -925,14 +936,10 @@ bool initialize(AuroraBackend auroraBackend, bool allowCpu) {
+@@ -925,14 +992,14 @@ bool initialize(AuroraBackend auroraBackend, bool allowCpu) {
      Log.info("Enabling features: {}", featureList);
  #ifdef WEBGPU_DAWN
      wgpu::DawnCacheDeviceDescriptor cacheDescriptor({.nextInChain = nullptr});
@@ -510,14 +569,18 @@ index 592b8ab..2517240 100644
 -        [](std::span<const std::byte> key, std::span<const std::byte> value) noexcept {
 -          store_to_cache(key.data(), key.size(), value.data(), value.size(), nullptr);
 -        });
-+    // Dawn's callback-info helpers reject these (non-capturing) lambdas, so hand the
-+    // cache callbacks over through the plain function-pointer fields instead.
-+    cacheDescriptor.loadDataFunction = load_from_cache;
-+    cacheDescriptor.storeDataFunction = store_to_cache;
++    // Wire the cache callbacks through the public C fields so both Dawn package
++    // generations work, including the ones that hide the C++ function-pointer members.
++    auto& cacheDescriptorRaw =
++        const_cast<WGPUDawnCacheDeviceDescriptor&>(static_cast<const WGPUDawnCacheDeviceDescriptor&>(cacheDescriptor));
++    CacheCallbackPair<HasLegacyCacheCallbacks<wgpu::DawnCacheDeviceDescriptor>::value,
++                      PointedFunction<decltype(cacheDescriptorRaw.dawnLoadCacheDataCallbackInfo.callback)>::type,
++                      PointedFunction<decltype(cacheDescriptorRaw.dawnStoreCacheDataCallbackInfo.callback)>::type>::
++        assign(cacheDescriptorRaw);
  
      constexpr std::array enableToggles{
  #if _WIN32
-@@ -1038,9 +1045,10 @@ bool initialize(AuroraBackend auroraBackend, bool allowCpu) {
+@@ -1038,9 +1105,10 @@ bool initialize(AuroraBackend auroraBackend, bool allowCpu) {
                .height = size.native_fb_height,
                .presentMode = presentMode,
            },
