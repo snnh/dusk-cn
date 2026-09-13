@@ -202,6 +202,80 @@ index 85a4285..e47c8df 100644
  void GXCreateFrameBuffer(u32 width, u32 height) {
    GX_WRITE_AURORA(GX_AURORA_BEGIN_OFFSCREEN);
    GX_WRITE_U32(width);
+diff --git a/lib/gfx/encoding.cpp b/lib/gfx/encoding.cpp
+index b3054be..f09011b 100644
+--- a/lib/gfx/encoding.cpp
++++ b/lib/gfx/encoding.cpp
+@@ -221,6 +221,11 @@ void render(wgpu::CommandEncoder& cmd, FramePacket& frame, RenderPass& passInfo,
+   wgpu::RenderPassDepthStencilAttachment depthStencilAttachment{};
+   const wgpu::RenderPassDepthStencilAttachment* depthStencilAttachmentPtr = nullptr;
+   if (passInfo.depthStencilView) {
++    // Dusk: the EFB/offscreen depth buffers use a depth-stencil format, and Dawn requires stencil
++    // ops whenever the attachment has a stencil aspect — even for passes that don't use stencil.
++    const bool hasStencilAspect = passInfo.depthStencilFormat == wgpu::TextureFormat::Depth24PlusStencil8 ||
++                                  passInfo.depthStencilFormat == wgpu::TextureFormat::Depth32FloatStencil8;
++    const bool useStencil = passInfo.hasStencil || hasStencilAspect;
+     depthStencilAttachment = {
+         .view = passInfo.depthStencilView,
+         .depthLoadOp = passInfo.hasDepth ? (passInfo.depthLoadOp != wgpu::LoadOp::Undefined
+@@ -229,8 +234,12 @@ void render(wgpu::CommandEncoder& cmd, FramePacket& frame, RenderPass& passInfo,
+                                          : wgpu::LoadOp::Undefined,
+         .depthStoreOp = passInfo.hasDepth ? passInfo.depthStoreOp : wgpu::StoreOp::Undefined,
+         .depthClearValue = passInfo.clearDepthValue,
+-        .stencilLoadOp = passInfo.hasStencil ? passInfo.stencilLoadOp : wgpu::LoadOp::Undefined,
+-        .stencilStoreOp = passInfo.hasStencil ? passInfo.stencilStoreOp : wgpu::StoreOp::Undefined,
++        .stencilLoadOp = useStencil ? (passInfo.stencilLoadOp != wgpu::LoadOp::Undefined ? passInfo.stencilLoadOp
++                                                                                        : wgpu::LoadOp::Load)
++                                    : wgpu::LoadOp::Undefined,
++        .stencilStoreOp = useStencil ? (passInfo.stencilStoreOp != wgpu::StoreOp::Undefined ? passInfo.stencilStoreOp
++                                                                                           : wgpu::StoreOp::Store)
++                                     : wgpu::StoreOp::Undefined,
+         .stencilClearValue = passInfo.stencilClearValue,
+     };
+     depthStencilAttachmentPtr = &depthStencilAttachment;
+diff --git a/lib/gfx/recording.cpp b/lib/gfx/recording.cpp
+index d04db0f..0cc3210 100644
+--- a/lib/gfx/recording.cpp
++++ b/lib/gfx/recording.cpp
+@@ -99,7 +99,9 @@ void set_efb_targets(RenderPass& pass) {
+       webgpu::g_graphicsConfig.msaaSamples > 1 ? webgpu::g_frameBufferResolved.texture : webgpu::g_frameBuffer.texture;
+   pass.copySourceView =
+       webgpu::g_graphicsConfig.msaaSamples > 1 ? webgpu::g_frameBufferResolved.view : webgpu::g_frameBuffer.view;
+-  pass.copySourceDepthView = webgpu::g_depthBuffer.view;
++  // Dusk: sample the depth-only aspect — binding all aspects of a depth-stencil texture as
++  // texture_depth_2d is invalid (and fatal on D3D12 with newer Dawn).
++  pass.copySourceDepthView = webgpu::g_depthBuffer.sampleView;
+   pass.msaaSamples = layout.sampleCount;
+   pass.hasDepth = true;
+   pass.hasStencil = false;
+@@ -376,11 +378,18 @@ OffscreenCacheEntry get_offscreen_textures(uint32_t width, uint32_t height) {
+   };
+   auto depthTexture = webgpu::g_device.CreateTexture(&depthDesc);
+   auto depthView = depthTexture.CreateView();
++  const wgpu::TextureViewDescriptor depthSampleViewDesc{
++      .label = "Offscreen Depth Sample View",
++      .dimension = wgpu::TextureViewDimension::e2D,
++      .aspect = wgpu::TextureAspect::DepthOnly,
++  };
++  auto depthSampleView = depthTexture.CreateView(&depthSampleViewDesc);
+   webgpu::TextureWithSampler depth{
+       .texture = std::move(depthTexture),
+       .view = std::move(depthView),
+       .size = size,
+       .format = depthFormat,
++      .sampleView = std::move(depthSampleView),
+   };
+   OffscreenCacheEntry entry{
+       .color = std::move(color),
+@@ -462,7 +471,7 @@ void start_offscreen(uint32_t width, uint32_t height) {
+       .depthStencilFormat = g_recorder.offscreenDepth.format,
+       .copySourceTexture = g_recorder.offscreenColor.texture,
+       .copySourceView = g_recorder.offscreenColor.view,
+-      .copySourceDepthView = g_recorder.offscreenDepth.view,
++      .copySourceDepthView = g_recorder.offscreenDepth.sampleView,
+       .msaaSamples = 1,
+       .clearDepthValue = gx::UseReversedZ ? 0.f : 1.f,
+       .clearDepth = true,
 diff --git a/lib/gx/command_processor.cpp b/lib/gx/command_processor.cpp
 index a84fef2..e3ccd25 100644
 --- a/lib/gx/command_processor.cpp
