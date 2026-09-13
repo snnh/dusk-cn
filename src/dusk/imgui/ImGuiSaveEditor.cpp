@@ -1,17 +1,17 @@
-﻿#include "fmt/format.h"
-#include "imgui.h"
-#include "aurora/gfx.h"
+﻿#include "ImGuiSaveEditor.hpp"
 
 #include "ImGuiConsole.hpp"
-#include "ImGuiSaveEditor.hpp"
 #include "ImGuiEventFlags.hpp"
 
+#include "d/actor/d_a_player.h"
 #include "d/d_com_inf_game.h"
 #include "d/d_item_data.h"
 #include "d/d_meter2_info.h"
 #include "d/d_save.h"
-#include "d/actor/d_a_player.h"
 #include "dusk/ui/i18n.hpp"
+
+#include <fmt/format.h>
+#include <imgui.h>
 
 #include <map>
 #include <string_view>
@@ -97,7 +97,7 @@ namespace dusk {
         { dItemNo_WEAR_KOKIRI_e, {"[SAVE_EDITOR_HERO_S_CLOTHES]"} },
         { dItemNo_ARMOR_e, {"[SAVE_EDITOR_MAGIC_ARMOR]"} },
         { dItemNo_WEAR_ZORA_e, {"[SAVE_EDITOR_ZORA_ARMOR]"} },
-        { dItemNo_MAGIC_LV1_e, {"[SAVE_EDITOR_MAGIC_LEVEL_1]"} },
+        { dItemNo_SHADOW_CRYSTAL_e, {"[SAVE_EDITOR_SHADOW_CRYSTAL]"} },
         { dItemNo_DUNGEON_EXIT_2_e, {"[SAVE_EDITOR_OOCCOO_SR]", ITEMTYPE_EQUIP_e} },
         { dItemNo_WALLET_LV1_e, {"[SAVE_EDITOR_WALLET]"} },
         { dItemNo_WALLET_LV2_e, {"[SAVE_EDITOR_BIG_WALLET]"} },

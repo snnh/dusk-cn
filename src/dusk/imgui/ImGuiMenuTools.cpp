@@ -1,25 +1,27 @@
-#include "fmt/format.h"
-#include "imgui.h"
-#include "aurora/gfx.h"
-
-#include "ImGuiConfig.hpp"
-#include "dusk/hotkeys.h"
-#include "dusk/settings.h"
-#include "ImGuiConsole.hpp"
 #include "ImGuiMenuTools.hpp"
 
+#include "ImGuiConfig.hpp"
+#include "ImGuiConsole.hpp"
 #include "ImGuiEngine.hpp"
+
+#include "dusk/data.hpp"
+#include "dusk/dusk.h"
+#include "dusk/hotkeys.h"
+#include "dusk/main.h"
+#include "dusk/os.h"
+#include "dusk/settings.h"
+#include "dusk/speedrun.h"
+#include "dusk/ui/i18n.hpp"
+
 #include "d/actor/d_a_alink.h"
 #include "d/actor/d_a_horse.h"
 #include "d/d_com_inf_game.h"
-#include "dusk/data.hpp"
-#include "dusk/dusk.h"
-#include "dusk/main.h"
-#include "dusk/ui/i18n.hpp"
-#include "dusk/os.h"
 #include "m_Do/m_Do_main.h"
 
+#include <aurora/gfx.h>
 #include <aurora/lib/internal.hpp>
+#include <fmt/format.h>
+#include <imgui.h>
 #include <SDL3/SDL_misc.h>
 #include <string>
 #include <string_view>
@@ -29,10 +31,6 @@
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
 #endif
-
-namespace aurora::gx {
-extern bool enableLodBias;
-}
 
 namespace dusk {
     namespace {
@@ -51,7 +49,7 @@ namespace dusk {
                 ImGui::BeginDisabled();
             }
 
-            ImGui::BeginDisabled(getSettings().game.speedrunMode);
+            ImGui::BeginDisabled(dusk::speedrun::isActive());
 
             ImGui::MenuItem(tx("[SAVE_EDITOR_SAVE_EDITOR]").c_str(), hotkeys::SHOW_SAVE_EDITOR, &m_showSaveEditor);
             ImGui::MenuItem("State Share", hotkeys::SHOW_STATE_SHARE, &m_showStateShare);
@@ -73,7 +71,7 @@ namespace dusk {
         }
 
         if (ImGui::BeginMenu("Debug")) {
-            ImGui::BeginDisabled(getSettings().game.speedrunMode);
+            ImGui::BeginDisabled(dusk::speedrun::isActive());
 
             bool developmentMode = mDoMain::developmentMode == 1;
             if (ImGui::Checkbox("Development Mode", &developmentMode)) {
@@ -89,7 +87,6 @@ namespace dusk {
                     getSettings().game.disableWaterRefraction.setValue(disableWaterRefraction);
                     config::save();
                 }
-                ImGui::Checkbox("Enable LOD Bias", &aurora::gx::enableLodBias);
                 ImGui::EndMenu();
             }
 
@@ -103,6 +100,28 @@ namespace dusk {
                 ImGui::Checkbox("Enable Target Collider view", &collisionView.enableTgView);
                 ImGui::Checkbox("Enable Push Collider view", &collisionView.enableCoView);
                 ImGui::SliderFloat("Opacity##colliders", &collisionView.colliderViewOpacity, 0.0f, 100.0f);
+                ImGui::EndMenu();
+            }
+
+            auto& triggerView = getTransientSettings().triggerView;
+            if (ImGui::BeginMenu(tx("[TRIGGER_VIEW]").c_str())) {
+                ImGui::Checkbox(tx("[LOAD_ZONES]").c_str(), &triggerView.loadZones);
+                ImGui::Checkbox(tx("[EVENT_AREAS]").c_str(), &triggerView.eventAreas);
+                ImGui::Checkbox(tx("[EVENT_TAGS]").c_str(), &triggerView.eventTags);
+                ImGui::Checkbox(tx("[SWITCH_AREAS]").c_str(), &triggerView.switchAreas);
+                ImGui::Checkbox(tx("[MIDNA_STOPS]").c_str(), &triggerView.midnaStops);
+                ImGui::Checkbox(tx("[TWILIGHT_GATES]").c_str(), &triggerView.twilightGates);
+                ImGui::Checkbox(tx("[CHECKPOINTS]").c_str(), &triggerView.checkpoints);
+                ImGui::Checkbox(tx("[PATHS]").c_str(), &triggerView.paths);
+                ImGui::Separator();
+                ImGui::Checkbox(tx("[TRANSFORM_DISTANCES]").c_str(), &triggerView.transformDists);
+                ImGui::Checkbox(
+                    tx("[ATTENTION_DISTANCES]").c_str(), &triggerView.attentionDists);
+                ImGui::Checkbox(tx("[PURPLE_MIST_AVOID]").c_str(), &triggerView.purpleMistAvoid);
+                ImGui::Checkbox(tx("[LEEVER_RANGES]").c_str(), &triggerView.leevers);
+                ImGui::Separator();
+                ImGui::SliderFloat(
+                    (tx("[OPACITY]") + "##triggers").c_str(), &triggerView.opacity, 0.0f, 100.0f);
                 ImGui::EndMenu();
             }
 
@@ -120,7 +139,7 @@ namespace dusk {
             ImGui::MenuItem("Stub Log", nullptr, &m_showStubLog);
             ImGui::MenuItem("Actor Spawner", nullptr, &m_showActorSpawner);
 
-            if (ImGui::MenuItem("Load Cave of Shadows")) {
+            if (ImGui::MenuItem(tx("[LOAD_CAVE_OF_SHADOWS]").c_str())) {
                 dusk::tphd::set_los_next_stage();
             }
 

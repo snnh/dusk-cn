@@ -39,6 +39,7 @@
 
 #if TARGET_PC
 #include "dusk/menu_pointer.h"
+#include "dusk/utilities.hpp"
 #endif
 
 typedef void (dMenu_Collect2D_c::*initFunc)();
@@ -101,11 +102,44 @@ dMenu_Collect2D_c::~dMenu_Collect2D_c() {
 }
 
 #if TARGET_PC
+static dusk::utils::PaneCache mpScreenPanes[] = {
+    {MULTI_CHAR('sa_tex_n'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('op_tex_n'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('heart_n'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('wolf_n'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('item_0_n'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('item_1_n'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('item_2_n'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('fish_3_n'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('lett_4_n'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('maki_5_n'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('fuku_n0'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('fuku_n1'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('fuku_n2'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('tate_n0'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('tate_n1'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('ken_n0'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('ken_n1'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('kabu_6n'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('t_t00'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('f_t00'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('itemn_n'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('infotxtn'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('sa_op_n'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('title_n'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('menu_n'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('w_er_n'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('center_n'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('info_n'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('lavel_n'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('modelbgn'), 0.0f, 0.0f, false},
+};
+
 void dMenu_Collect2D_c::menuCollectWide() {
     static bool cachedPanes = false;
     // Get pre-scale values for each pane
-    if (!sMenuCollectCachedPanes) {
-        for (MenuCollectPaneCache& entry : sMenuCollectScreenPanes) {
+    if (!cachedPanes) {
+        for (dusk::utils::PaneCache& entry : mpScreenPanes) {
             J2DPane* pane = mpScreen->search(entry.tag);
             if (!entry.cached) {
                 entry.origTransX = pane->getTranslateX();
@@ -113,13 +147,13 @@ void dMenu_Collect2D_c::menuCollectWide() {
                 entry.cached = true;
             }
         }
-        sMenuCollectCachedPanes = true;
+        cachedPanes = true;
     }
 
     // Reset all panes
     mpScreen->scale(1.0f, 1.0f);
     mpScreen->translate(0.0f, 0.0f);
-    for (MenuCollectPaneCache& entry : sMenuCollectScreenPanes) {
+    for (dusk::utils::PaneCache& entry : mpScreenPanes) {
         J2DPane* pane = mpScreen->search(entry.tag);
         pane->scale(1.0f, 1.0f);
         pane->translate(entry.origTransX, entry.origTransY);
@@ -770,7 +804,7 @@ void dMenu_Collect2D_c::screenSet() {
         field_0x184[0][3] = 0x199;
     } else if (dComIfGs_getWalletSize() == BIG_WALLET) {
         field_0x184[0][3] = 0x19a;
-    } if (dusk::tphd_active() && dComIfGs_getWalletSize() == 3) {
+    } else if (dusk::tphd_active() && dComIfGs_getWalletSize() == 3) {
         field_0x184[0][3] = 0x19c;
     } else {
         field_0x184[0][3] = 0x19b;

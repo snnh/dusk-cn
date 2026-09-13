@@ -3,9 +3,13 @@
 #include "dusk/app_info.hpp"
 #include "dusk/config.hpp"
 #include "dusk/data.hpp"
+#include "dusk/game_mode.hpp"
 #include "dusk/iso_validate.hpp"
+#include "dusk/language.hpp"
 #include "dusk/main.h"
 #include "dusk/settings.h"
+#include "dusk/ui/format.hpp"
+#include "dusk/ui/menu_bar.hpp"
 #include "modal.hpp"
 #include "mods_window.hpp"
 #include "preset.hpp"
@@ -16,6 +20,7 @@
 #include <SDL3/SDL_misc.h>
 #include <aurora/lib/window.hpp>
 #include <borealis/file_select.hpp>
+#include <borealis/io.hpp>
 #include <borealis/log.hpp>
 #include <borealis/update.hpp>
 #include <borealis/version.h>
@@ -34,39 +39,43 @@
 namespace dusk::ui {
 namespace {
 constexpr borealis::Log PrelaunchLog{"dusk::ui::prelaunch"};
+constexpr ByteFormat verificationByteFormat{.gibFractionDigits = 2, .mibFractionDigits = 0};
+
+PrelaunchState sPrelaunchState;
 
 const Rml::String kDocumentSource = R"RML(
 <rml>
 <head>
+    <link type="text/rcss" href="res/rml/theme.rcss" />
     <link type="text/rcss" href="res/rml/prelaunch.rcss" />
 </head>
 <body>
-    <div class="gradient" />
-    <div class="background" />
+    <prelaunch-gradient />
+    <prelaunch-background />
     <content id="root" open>
         <menu>
             <hero class="intro-item delay-0">
-                <eyebrow><span>[TWILIT_REALM]</span> [PRESENTS]</eyebrow>
+                <eyebrow><studio-name>[TWILIT_REALM]</studio-name> [PRESENTS]</eyebrow>
                 <img src="res/logo.png" />
             </hero>
-            <div id="menu-list" />
+            <menu-list id="menu-list" />
         </menu>
         <disc-info class="intro-item delay-5">
-            <div id="disc-status">
+            <disc-status id="disc-status">
                 <icon />
-                <span id="disc-status-label" />
-            </div>
-            <span id="disc-version" class="detail" />
+                <disc-status-label id="disc-status-label" />
+            </disc-status>
+            <disc-version id="disc-version" />
         </disc-info>
-        <version-info class="intro-item delay-5">
-            <div class="version">[VERSION] <span id="version-text"></span></div>
-            <div id="update-status" class="update">
-                <span id="update-message"></span>
+        <version-info class="intro-item delay-6">
+            <version-label>[VERSION] <version-number id="version-text"></version-number></version-label>
+            <update-status id="update-status">
+                <update-message id="update-message"></update-message>
                 <button id="update-download">
-                    <span id="update-download-label"></span>
+                    <update-download-label id="update-download-label"></update-download-label>
                     &nbsp;<icon />
                 </button>
-            </div>
+            </update-status>
         </version-info>
     </content>
 </body>
@@ -128,42 +137,7 @@ struct DiscVerificationTask {
 std::unique_ptr<DiscVerificationTask> sDiscVerificationTask;
 bool sDiscVerificationModalPushed = false;
 
-struct UpdateCheckTask {
-    UpdateCheckTask() {
-        worker = std::thread([this] {
-            try {
-                result = borealis::update::check_latest_github_release(AppInfo);
-            } catch (const std::exception& e) {
-                result = {
-                    .status = borealis::update::Status::Failed,
-                    .message = fmt::format("Update check failed with exception: {}", e.what()),
-                };
-            } catch (...) {
-                result = {
-                    .status = borealis::update::Status::Failed,
-                    .message = "Update check failed with an unknown exception",
-                };
-            }
-            done.store(true, std::memory_order_release);
-        });
-    }
-
-    ~UpdateCheckTask() { join(); }
-
-    void join() {
-        if (worker.joinable()) {
-            worker.join();
-        }
-    }
-
-    [[nodiscard]] bool finished() const { return done.load(std::memory_order_acquire); }
-
-    borealis::update::Result result;
-    std::atomic_bool done = false;
-    std::thread worker;
-};
-
-std::unique_ptr<UpdateCheckTask> sUpdateCheckTask;
+borealis::Task<borealis::update::Result> sUpdateCheck;
 std::optional<borealis::update::Result> sUpdateCheckResult;
 
 bool verification_state_allows_launch(iso::ValidationError validation) noexcept {
@@ -192,22 +166,6 @@ DiscVerificationState verification_to_config(iso::ValidationError validation) {
     default:
         return DiscVerificationState::Unknown;
     }
-}
-
-std::string format_bytes(std::size_t bytes) {
-    constexpr double KiB = 1024.0;
-    constexpr double MiB = KiB * 1024.0;
-    constexpr double GiB = MiB * 1024.0;
-    if (bytes >= static_cast<std::size_t>(GiB)) {
-        return fmt::format("{:.2f} GiB", static_cast<double>(bytes) / GiB);
-    }
-    if (bytes >= static_cast<std::size_t>(MiB)) {
-        return fmt::format("{:.0f} MiB", static_cast<double>(bytes) / MiB);
-    }
-    if (bytes >= static_cast<std::size_t>(KiB)) {
-        return fmt::format("{:.0f} KiB", static_cast<double>(bytes) / KiB);
-    }
-    return fmt::format("{} B", bytes);
 }
 
 void begin_disc_verification(std::string path) noexcept {
@@ -241,20 +199,19 @@ void begin_update_check() {
     if (!getSettings().backend.checkForUpdates.getValue()) {
         return;
     }
-    if (sUpdateCheckTask != nullptr || sUpdateCheckResult.has_value()) {
+    if (sUpdateCheck || sUpdateCheckResult.has_value()) {
         return;
     }
-    sUpdateCheckTask = std::make_unique<UpdateCheckTask>();
+    sUpdateCheck = borealis::update::check_latest_github_release(AppInfo);
 }
 
 std::optional<borealis::update::Result> take_finished_update_check() {
-    if (sUpdateCheckTask == nullptr || !sUpdateCheckTask->finished()) {
+    if (!sUpdateCheck || !sUpdateCheck.ready()) {
         return std::nullopt;
     }
 
-    sUpdateCheckTask->join();
-    auto result = std::move(sUpdateCheckTask->result);
-    sUpdateCheckTask.reset();
+    auto result = sUpdateCheck.try_take();
+    sUpdateCheck = {};
     return result;
 }
 
@@ -304,7 +261,7 @@ std::string get_error_msg(iso::ValidationError error) {
     case iso::ValidationError::WrongGame:
         return "[THE_SELECTED_GAME_IS_NOT_SUPPORTED_BY_DUSKLIGHT]";
     case iso::ValidationError::WrongVersion:
-        return "[DUSKLIGHT_CURRENTLY_SUPPORTS_GAMECUBE_USA_AND_PAL_DISC_IMAGES_ONLY]";
+        return "[DUSKLIGHT_DOES_NOT_CURRENTLY_SUPPORT_THE_WIIS_KOREAN_VERSION]";
     case iso::ValidationError::Canceled:
         return "[DISC_VERIFICATION_WAS_CANCELED_DUSKLIGHT_CANNOT_GUARANTEE_THE_SELECTED]";
     case iso::ValidationError::HashMismatch:
@@ -328,6 +285,24 @@ void persist_disc_choice(const std::string& path, iso::ValidationError validatio
     }
 }
 
+void apply_language_for_disc(const iso::DiscInfo& info) {
+    const auto langs = language::available_languages(info);
+    auto& language = getSettings().game.language;
+    const GameLanguage previous = language.getValue();
+    if (std::ranges::find(langs, previous) != langs.end()) {
+        return;
+    }
+
+    const GameLanguage fallback = langs.front();
+    language.setValue(fallback);
+    config::save();
+
+    auto& state = prelaunch_state();
+    state.initialLanguage = fallback;
+    state.unavailableLanguage = previous;
+    state.pendingLanguageUnavailableNotice = true;
+}
+
 void apply_valid_disc_result(
     const std::string& path, const iso::DiscInfo& info, iso::ValidationError validation) {
     auto& state = prelaunch_state();
@@ -340,6 +315,7 @@ void apply_valid_disc_result(
         state.activeDiscInfo = info;
     }
     persist_disc_choice(path, validation);
+    apply_language_for_disc(info);
 }
 
 void apply_disc_verification_result(const DiscVerificationResult& result) {
@@ -351,7 +327,7 @@ void apply_disc_verification_result(const DiscVerificationResult& result) {
         state.pendingDiscPath = result.path;
         state.pendingDiscInfo = result.info;
         state.pendingDiscValidation = result.validation;
-        state.errorString = escape(get_error_msg(result.validation));
+        state.errorString = get_error_msg(result.validation);
         return;
     }
 
@@ -367,42 +343,35 @@ void apply_disc_verification_result(const DiscVerificationResult& result) {
     state.pendingDiscPath.clear();
     state.pendingDiscInfo = {};
     state.pendingDiscValidation = iso::ValidationError::Unknown;
-    state.errorString = escape(get_error_msg(result.validation));
+    state.errorString = get_error_msg(result.validation);
 }
 
 class DiscVerificationModal : public WindowSmall {
 public:
-    DiscVerificationModal() : WindowSmall("modal", "modal-dialog") {
-        auto* header = append(mDialog, "div");
-        header->SetClass("modal-header", true);
+    DiscVerificationModal() : WindowSmall("modal") {
+        auto* header = append(mDialog, "modal-header");
 
-        auto* title = append(header, "div");
-        title->SetClass("modal-title", true);
+        auto* title = append(header, "modal-title");
         title->SetInnerRML("[DISC_VERIFYING_TITLE]");
 
         auto* icon = append(header, "icon");
         icon->SetClass("verifying", true);
 
-        auto* body = append(mDialog, "div");
-        body->SetClass("modal-body", true);
+        auto* body = append(mDialog, "modal-body");
 
-        auto* content = append(body, "div");
-        content->SetClass("verification-progress", true);
+        auto* content = append(body, "verification-progress");
 
-        mFileName = append(content, "div");
-        mFileName->SetClass("verification-file", true);
+        mFileName = append(content, "verification-file");
 
         mProgress = append(content, "progress");
         mProgress->SetClass("progress-ongoing", true);
         mProgress->SetClass("verification-progress-bar", true);
         mProgress->SetAttribute("value", 0.f);
 
-        mDetail = append(content, "div");
-        mDetail->SetClass("verification-detail", true);
+        mDetail = append(content, "verification-detail");
 
-        auto* actions = append(mDialog, "div");
-        actions->SetClass("modal-actions", true);
-        mCancelButton = std::make_unique<Button>(actions, "Cancel");
+        auto* actions = append(mDialog, "modal-actions");
+        mCancelButton = std::make_unique<Button>(actions, "[CANCEL]");
         mCancelButton->root()->SetClass("modal-btn", true);
         mCancelButton->on_pressed([this] { request_cancel(); });
 
@@ -466,16 +435,16 @@ private:
         }
 
         if (mFileName != nullptr) {
-            std::string fileName = borealis::file_select::display_name(sDiscVerificationTask->path);
+            std::string fileName = borealis::io::display_name(sDiscVerificationTask->path);
             if (fileName.empty()) {
                 fileName = sDiscVerificationTask->path;
             }
-            mFileName->SetInnerRML(escape(fileName));
+            set_text_content(mFileName, fileName);
         }
 
-        const std::size_t bytesRead =
+        const size_t bytesRead =
             sDiscVerificationTask->status.bytesRead.load(std::memory_order_relaxed);
-        const std::size_t bytesTotal =
+        const size_t bytesTotal =
             sDiscVerificationTask->status.bytesTotal.load(std::memory_order_relaxed);
 
         if (bytesTotal == 0) {
@@ -483,7 +452,7 @@ private:
                 mProgress->SetAttribute("value", 0.f);
             }
             if (mDetail != nullptr) {
-                mDetail->SetInnerRML("[DISC_OPENING]");
+                set_text_content(mDetail, "[DISC_OPENING]");
             }
             return;
         }
@@ -494,8 +463,9 @@ private:
             mProgress->SetAttribute("value", fraction);
         }
         if (mDetail != nullptr) {
-            mDetail->SetInnerRML(escape(fmt::format("{} / {} ({:.0f}%)", format_bytes(bytesRead),
-                format_bytes(bytesTotal), fraction * 100.0f)));
+            set_text_content(mDetail,
+                fmt::format("{} / {} ({:.0f}%)", format_bytes(bytesRead, verificationByteFormat),
+                    format_bytes(bytesTotal, verificationByteFormat), fraction * 100.0f));
         }
     }
 
@@ -532,7 +502,162 @@ void folder_dialog_callback(borealis::file_select::Result result) {
     config::save();
 }
 
-PrelaunchState sPrelaunchState;
+const char* language_name_token(GameLanguage language) noexcept {
+    switch (language) {
+    case GameLanguage::English:
+        return "[ENGLISH]";
+    case GameLanguage::German:
+        return "[GERMAN]";
+    case GameLanguage::French:
+        return "[FRENCH]";
+    case GameLanguage::Spanish:
+        return "[SPANISH]";
+    case GameLanguage::Italian:
+        return "[ITALIAN]";
+    case GameLanguage::Japanese:
+        return "[JAPANESE]";
+    }
+    return "[ENGLISH]";
+}
+
+std::vector<const gamemode::GameMode*> carousel_game_modes() {
+    const auto& registered = gamemode::getGameModeManager().getRegisteredGameModes();
+    std::vector<const gamemode::GameMode*> modes;
+    modes.reserve(registered.size());
+
+    if (const auto vanilla = registered.find(gamemode::kVanillaGameModeId);
+        vanilla != registered.end())
+    {
+        modes.push_back(&vanilla->second);
+    }
+    for (const auto& [id, mode] : registered) {
+        if (id != gamemode::kVanillaGameModeId) {
+            modes.push_back(&mode);
+        }
+    }
+    std::ranges::sort(modes.begin() + std::min<size_t>(1, modes.size()), modes.end(),
+        [](const auto* lhs, const auto* rhs) { return lhs->getFullName() < rhs->getFullName(); });
+    return modes;
+}
+
+std::string game_mode_button_text() {
+    if (prelaunch_state().activeDiscPath.empty()) {
+        return "[SELECT_DISC_IMAGE]";
+    }
+    const auto* currentGameMode = gamemode::getGameModeManager().getCurrentGameMode();
+    if (currentGameMode == nullptr || currentGameMode->getId() == gamemode::kVanillaGameModeId) {
+        return "[PLAY]";
+    }
+    return currentGameMode->getFullName();
+}
+
+class GameModeButton final : public Button {
+public:
+    GameModeButton(Rml::Element* parent, ButtonCallback onPressed) : Button{parent, ""} {
+        root()->SetClass("game-mode-button", true);
+        mPrevious = append(root(), "game-mode-previous");
+        mLabelViewport = append(root(), "game-mode-label-viewport");
+        for (auto& label : mLabels) {
+            label = append(mLabelViewport, "game-mode-label");
+        }
+        mNext = append(root(), "game-mode-next");
+
+        Component::listen(mPrevious, Rml::EventId::Click, [this](Rml::Event& event) {
+            cycle(-1);
+            event.StopPropagation();
+        });
+        Component::listen(mNext, Rml::EventId::Click, [this](Rml::Event& event) {
+            cycle(1);
+            event.StopPropagation();
+        });
+        Component::listen(root(), Rml::EventId::Keydown, [this](Rml::Event& event) {
+            const auto command = map_nav_event(event);
+            if (command == NavCommand::Left || command == NavCommand::Right) {
+                cycle(command == NavCommand::Left ? -1 : 1);
+                event.StopPropagation();
+            }
+        });
+        on_pressed(std::move(onPressed));
+        refresh(0);
+    }
+
+    void update() override {
+        refresh(0);
+        Button::update();
+    }
+
+private:
+    bool can_cycle() const {
+        return !prelaunch_state().activeDiscPath.empty() &&
+               gamemode::getGameModeManager().getRegisteredGameModes().size() > 1;
+    }
+
+    void cycle(int direction) {
+        const auto modes = carousel_game_modes();
+        if (!can_cycle() || modes.empty()) {
+            return;
+        }
+
+        const auto* current = gamemode::getGameModeManager().getCurrentGameMode();
+        const auto currentIt = std::ranges::find_if(modes, [current](const auto* mode) {
+            return current != nullptr && mode->getId() == current->getId();
+        });
+        const int currentIndex =
+            currentIt == modes.end() ? 0 : static_cast<int>(currentIt - modes.begin());
+        const int count = static_cast<int>(modes.size());
+        const int nextIndex = ((currentIndex + direction) % count + count) % count;
+        const auto nextId = modes[nextIndex]->getId();
+        if (gamemode::getGameModeManager().setCurrentGameMode(nextId)) {
+            mDoAud_seStartMenu(kSoundItemChange);
+        }
+        refresh(direction);
+    }
+
+    void refresh(int direction) {
+        root()->SetClass("can-cycle", can_cycle());
+
+        const auto text = game_mode_button_text();
+        if (text == mText) {
+            return;
+        }
+        mText = text;
+        if (direction == 0) {
+            set_text_content(mLabels[mActiveLabel], text);
+            mLabels[mActiveLabel]->SetProperty(
+                Rml::PropertyId::Left, Rml::Property{0.0f, Rml::Unit::PERCENT});
+            mLabels[mActiveLabel]->SetClass("active", true);
+            mLabels[1 - mActiveLabel]->SetClass("active", false);
+            return;
+        }
+
+        constexpr float kSlideDistance = 100.0f;
+        constexpr float kSlideDuration = 0.24f;
+        auto* outgoing = mLabels[mActiveLabel];
+        mActiveLabel = 1 - mActiveLabel;
+        auto* incoming = mLabels[mActiveLabel];
+        set_text_content(incoming, text);
+
+        const Rml::Property incomingOffset{
+            static_cast<float>(direction) * kSlideDistance, Rml::Unit::PERCENT};
+        const Rml::Property outgoingOffset{
+            static_cast<float>(-direction) * kSlideDistance, Rml::Unit::PERCENT};
+
+        outgoing->Animate(Rml::PropertyId::Left, outgoingOffset, kSlideDuration,
+            Rml::Tween{Rml::Tween::Cubic, Rml::Tween::InOut});
+        incoming->Animate(Rml::PropertyId::Left, Rml::Property{0.0f, Rml::Unit::PERCENT},
+            kSlideDuration, Rml::Tween{Rml::Tween::Cubic, Rml::Tween::InOut}, 1, false, 0.0f,
+            &incomingOffset);
+        outgoing->SetClass("active", false);
+        incoming->SetClass("active", true);
+    }
+
+    Rml::Element* mPrevious = nullptr;
+    Rml::Element* mLabelViewport = nullptr;
+    std::array<Rml::Element*, 2> mLabels{};
+    Rml::Element* mNext = nullptr;
+    Rml::String mText;
+    size_t mActiveLabel = 0;
+};
 
 }  // namespace
 
@@ -573,6 +698,7 @@ void refresh_configured_disc_state() noexcept {
         if (state.configuredDiscPath == state.activeDiscPath) {
             state.activeDiscInfo = info;
         }
+        apply_language_for_disc(info);
         return;
     }
 
@@ -607,7 +733,7 @@ void try_push_verification_modal(Document& host) {
 
     if (!state.pendingDiscPath.empty()) {
         const Rml::String bodyRml =
-            state.errorString + "[YOU_MAY_PROCEED_AT_YOUR_OWN_RISK]";
+            escape(state.errorString) + "[YOU_MAY_PROCEED_AT_YOUR_OWN_RISK]";
         auto acceptHashMismatch = [](Modal& modal) {
             auto& st = prelaunch_state();
             std::string path = std::move(st.pendingDiscPath);
@@ -644,7 +770,7 @@ void try_push_verification_modal(Document& host) {
 
     host.push(std::make_unique<Modal>(Modal::Props{
         .title = "[DISC_VERIFICATION_ERROR]",
-        .bodyRml = state.errorString,
+        .bodyText = state.errorString,
         .actions =
             {
                 ModalAction{
@@ -654,6 +780,37 @@ void try_push_verification_modal(Document& host) {
             },
         .onDismiss = dismiss,
         .icon = "error",
+    }));
+}
+
+void try_push_language_unavailable_modal(Document& host) {
+    auto& state = prelaunch_state();
+
+    if (!state.pendingLanguageUnavailableNotice) {
+        return;
+    }
+    state.pendingLanguageUnavailableNotice = false;
+
+    Rml::String bodyTemplate;
+    i18n::translate(bodyTemplate, "[LANGUAGE_UNAVAILABLE_BODY]");
+    const Rml::String bodyRml = fmt::format(fmt::runtime(bodyTemplate),
+        language_name_token(state.unavailableLanguage),
+        language_name_token(getSettings().game.language.getValue()));
+
+    auto dismiss = [](Modal& modal) { modal.pop(); };
+
+    host.push(std::make_unique<Modal>(Modal::Props{
+        .title = "[LANGUAGE_UNAVAILABLE]",
+        .bodyRml = bodyRml,
+        .actions =
+            {
+                ModalAction{
+                    .label = "[OK]",
+                    .onPressed = dismiss,
+                },
+            },
+        .onDismiss = dismiss,
+        .icon = "warning",
     }));
 }
 
@@ -743,61 +900,25 @@ void try_apply_mirrored_layout(Rml::Element* body) {
     body->SetClass("mirrored", getSettings().game.enableMirrorMode.getValue());
 }
 
-Prelaunch::Prelaunch()
-    : Document(kDocumentSource, false, DocumentScope::Prelaunch),
-      mRoot(mDocument->GetElementById("root")) {
+void Prelaunch::refresh_menu_buttons() {
+    auto* prelaunch = static_cast<Prelaunch*>(find_document(DocumentScope::Prelaunch));
+    if (prelaunch == nullptr) {
+        return;
+    }
+    auto* menuList = prelaunch->mDocument->GetElementById("menu-list");
+    while (menuList->GetNumChildren() > 0) {
+        menuList->RemoveChild(menuList->GetChild(0));
+    }
+    prelaunch->mMenuButtons.clear();
+    prelaunch->build_menu_buttons();
+}
+
+Prelaunch::Prelaunch() : Document(kDocumentSource, false, DocumentScope::Prelaunch) {
+    mRoot = mDocument->GetElementById("root");
     ensure_initialized();
     begin_update_check();
 
-    if (auto* menuList = mDocument->GetElementById("menu-list")) {
-        auto& state = prelaunch_state();
-        const bool activeDiscLoaded = !state.activeDiscPath.empty();
-        mMenuButtons.push_back(std::make_unique<Button>(
-            menuList, activeDiscLoaded ? "[PLAY]" : "[SELECT_DISC_IMAGE]"));
-        mMenuButtons.back()->on_pressed([this] {
-            if (prelaunch_state().activeDiscPath.empty()) {
-                open_iso_picker();
-                return;
-            }
-
-            mDoAud_seStartMenu(kSoundPlay);
-            show_menu_notification();
-
-            if (getSettings().audio.menuSounds) {
-                JAISoundHandle* handle = g_mEnvSeMgr.field_0x144.getHandle();
-                if (*handle) {
-                    (*handle)->stop(60);
-                    (*handle)->releaseHandle();
-                }
-            }
-
-            if (g_mDoMemCd_control.mCardCommand == mDoMemCd_Ctrl_c::Command_e::COMM_NONE_e) {
-                mDoMemCd_ThdInit();
-            }
-
-            IsGameLaunched = true;
-            pop();
-        });
-        apply_intro_animation(mMenuButtons.back()->root(), "delay-1");
-
-        mMenuButtons.push_back(std::make_unique<Button>(menuList, "[SETTINGS]"));
-        mMenuButtons.back()->on_pressed([this] {
-            mRestartSuppressed = false;
-            push(std::make_unique<SettingsWindow>(true));
-        });
-        apply_intro_animation(mMenuButtons.back()->root(), "delay-2");
-
-        mMenuButtons.push_back(std::make_unique<Button>(menuList, "[MODS]"));
-        mMenuButtons.back()->on_pressed([this] {
-            mRestartSuppressed = false;
-            push(std::make_unique<ModsWindow>());
-        });
-        apply_intro_animation(mMenuButtons.back()->root(), "delay-3");
-
-        mMenuButtons.push_back(std::make_unique<Button>(menuList, "[QUIT]"));
-        mMenuButtons.back()->on_pressed([] { IsRunning = false; });
-        apply_intro_animation(mMenuButtons.back()->root(), "delay-4");
-    }
+    build_menu_buttons();
 
     mDiscStatus = mDocument->GetElementById("disc-status");
     mDiscDetail = mDocument->GetElementById("disc-version");
@@ -835,6 +956,68 @@ Prelaunch::Prelaunch()
     });
 }
 
+void Prelaunch::build_menu_buttons() {
+    if (auto* menuList = mDocument->GetElementById("menu-list")) {
+        // Restore the previously selected game mode before creating the play control.
+        gamemode::getGameModeManager().setGameModeToPrevious();
+
+        auto playButton = std::make_unique<GameModeButton>(menuList, [this] {
+            if (prelaunch_state().activeDiscPath.empty()) {
+                open_iso_picker();
+                return;
+            }
+
+            if (const auto* gameMode = gamemode::getGameModeManager().getCurrentGameMode();
+                gameMode != nullptr && !gameMode->invokeOnPlayFunction())
+            {
+                gamemode::getGameModeManager().setCurrentGameMode(gamemode::kVanillaGameModeId);
+                return;
+            }
+
+            mDoAud_seStartMenu(kSoundPlay);
+            show_menu_notification();
+
+            if (getSettings().audio.menuSounds) {
+                JAISoundHandle* handle = g_mEnvSeMgr.field_0x144.getHandle();
+                if (*handle) {
+                    (*handle)->stop(60);
+                    (*handle)->releaseHandle();
+                }
+            }
+
+            if (g_mDoMemCd_control.mCardCommand == mDoMemCd_Ctrl_c::Command_e::COMM_NONE_e) {
+                mDoMemCd_ThdInit();
+            }
+
+            prelaunch_state().firstLaunch = false;
+            IsGameLaunched = true;
+            hide(true);
+            MenuBar::refresh_tabs();
+        });
+        apply_intro_animation(playButton->root(), "delay-1");
+        mMenuButtons.push_back(std::move(playButton));
+
+        mMenuButtons.push_back(std::make_unique<Button>(menuList, "[SETTINGS]"));
+        mMenuButtons.back()->on_pressed([this] {
+            mRestartSuppressed = false;
+            bool showPrelaunchSettings = prelaunch_state().firstLaunch;
+            push(std::make_unique<SettingsWindow>(showPrelaunchSettings));
+        });
+        apply_intro_animation(mMenuButtons.back()->root(), "delay-2");
+
+        mMenuButtons.push_back(std::make_unique<Button>(menuList, "[MODS]"));
+        mMenuButtons.back()->on_pressed([this] {
+            mRestartSuppressed = false;
+            push(std::make_unique<ModsWindow>());
+        });
+        apply_intro_animation(mMenuButtons.back()->root(), "delay-3");
+
+        mMenuButtons.push_back(std::make_unique<Button>(menuList, "[QUIT]"));
+        mMenuButtons.back()->on_pressed([] { IsRunning = false; });
+        apply_intro_animation(mMenuButtons.back()->root(), "delay-4");
+    }
+}
+
 void Prelaunch::show() {
     Document::show();
     mDocument->SetAttribute("open", "");
@@ -846,14 +1029,14 @@ void Prelaunch::show() {
             modal.pop();
         };
         std::vector<ModalAction> actions;
-        if constexpr (dusk::SupportsProcessRestart) {
+        if constexpr (SupportsProcessRestart) {
             actions.push_back(ModalAction{
                 .label = "[RESTART_LATER]",
                 .onPressed = dismiss,
             });
             actions.push_back(ModalAction{
                 .label = "[RESTART_NOW]",
-                .onPressed = [](Modal&) { dusk::RequestRestart(); },
+                .onPressed = [](Modal&) { RequestRestart(); },
             });
         } else {
             actions.push_back(ModalAction{
@@ -864,7 +1047,7 @@ void Prelaunch::show() {
         push(std::make_unique<Modal>(Modal::Props{
             .title = "[APPLY_OPTIONS]",
             .bodyRml =
-                dusk::SupportsProcessRestart ?
+                SupportsProcessRestart ?
                     "[A_RESTART_IS_REQUIRED_TO_APPLY_SELECTED_OPTIONS_RESTART_NOW_TO_APPLY_THE]" :
                     "[A_RESTART_IS_REQUIRED_TO_APPLY_SELECTED_OPTIONS_CLOSE_AND_REOPEN_DUSKLIG]",
             .actions = std::move(actions),
@@ -893,6 +1076,7 @@ void Prelaunch::update() {
 
     if (top_document() == this) {
         try_push_verification_modal(*this);
+        try_push_language_unavailable_modal(*this);
     }
 
     const auto& state = prelaunch_state();
@@ -911,9 +1095,8 @@ void Prelaunch::update() {
         mEntranceAnimationStarted = true;
     }
 
-    if (!mMenuButtons.empty()) {
-        mMenuButtons[0]->set_text(
-            activeDiscLoaded ? "[PLAY]" : "[SELECT_DISC_IMAGE]");
+    for (const auto& button : mMenuButtons) {
+        button->update();
     }
 
     const auto discStatusLabel = mDiscStatus->GetElementById("disc-status-label");
@@ -921,22 +1104,22 @@ void Prelaunch::update() {
     if (mDiscStatus != nullptr && discStatusLabel != nullptr) {
         if (!activeDiscLoaded) {
             mDiscStatus->RemoveAttribute("status");
-            discStatusLabel->SetInnerRML("[NO_DISC_IMAGE_FOUND]");
+            set_text_content(discStatusLabel, "[NO_DISC_IMAGE_FOUND]");
         } else if (discRestartPending) {
             mDiscStatus->SetAttribute("status", "pending");
-            discStatusLabel->SetInnerRML("[PENDING_RESTART]");
+            set_text_content(discStatusLabel, "[PENDING_RESTART]");
         } else if (state.configuredDiscValidation == iso::ValidationError::Success) {
             mDiscStatus->SetAttribute("status", "good");
-            discStatusLabel->SetInnerRML("[DISC_READY]");
+            set_text_content(discStatusLabel, "[DISC_READY]");
         } else if (state.configuredDiscValidation == iso::ValidationError::HashMismatch) {
             mDiscStatus->SetAttribute("status", "mismatch");
-            discStatusLabel->SetInnerRML("[DISC_HASH_MISMATCH]");
+            set_text_content(discStatusLabel, "[DISC_HASH_MISMATCH]");
         } else if (canLaunchConfiguredDisc) {
             mDiscStatus->SetAttribute("status", "unknown");
-            discStatusLabel->SetInnerRML("[DISC_NOT_VERIFIED]");
+            set_text_content(discStatusLabel, "[DISC_NOT_VERIFIED]");
         } else {
             mDiscStatus->SetAttribute("status", "bad");
-            discStatusLabel->SetInnerRML("[DISC_UNAVAILABLE]");
+            set_text_content(discStatusLabel, "[DISC_UNAVAILABLE]");
         }
     }
     if (mDiscDetail != nullptr) {
@@ -946,13 +1129,13 @@ void Prelaunch::update() {
 
             switch (state.activeDiscInfo.platform) {
             case iso::Platform::Unknown:
-                innerRML += "Unknown";
+                innerRML += "[UNKNOWN]";
                 break;
             case iso::Platform::GameCube:
-                innerRML += "GameCube";
+                innerRML += "[GAMECUBE]";
                 break;
             case iso::Platform::Wii:
-                innerRML += "Wii";
+                innerRML += "[WII]";
                 break;
             }
 
@@ -967,15 +1150,18 @@ void Prelaunch::update() {
                 break;
             case iso::Region::NorthAmerica:
                 innerRML += "USA";
+                if (state.activeDiscInfo.platform == iso::Platform::Wii) {
+                    innerRML += fmt::format(" Rev. {}", state.activeDiscInfo.revision);
+                }
                 break;
             case iso::Region::Korea:
                 innerRML += "KOR";
                 break;
             default:
-                innerRML += "Unknown";
+                innerRML += "[UNKNOWN]";
                 break;
             }
-            mDiscDetail->SetInnerRML(innerRML);
+            set_text_content(mDiscDetail, innerRML);
         } else {
             mDiscDetail->SetProperty(Rml::PropertyId::Display, Rml::Style::Display::None);
         }
@@ -985,7 +1171,7 @@ void Prelaunch::update() {
         if (versionStr[0] == 'v') {
             versionStr = versionStr.substr(1);
         }
-        mVersion->SetInnerRML(escape(versionStr));
+        set_text_content(mVersion, Rml::String{versionStr});
     }
     if (mUpdateStatus != nullptr && mUpdateMessage != nullptr) {
         if (auto result = take_finished_update_check()) {
@@ -995,28 +1181,34 @@ void Prelaunch::update() {
             sUpdateCheckResult = std::move(*result);
         }
 
-        if (sUpdateCheckTask != nullptr) {
+        if (sUpdateCheck) {
             mUpdateStatus->SetAttribute("state", "checking");
-            mUpdateMessage->SetInnerRML("[CHECKING_FOR_UPDATES]");
+            set_text_content(mUpdateMessage, "[CHECKING_FOR_UPDATES]");
         } else if (!sUpdateCheckResult.has_value() ||
                    sUpdateCheckResult->status == borealis::update::Status::UpToDate)
         {
             mUpdateStatus->RemoveAttribute("state");
-            mUpdateMessage->SetInnerRML("");
+            set_text_content(mUpdateMessage, "");
         } else if (sUpdateCheckResult->status == borealis::update::Status::UpdateAvailable) {
             mUpdateStatus->SetAttribute("state", "available");
-            mUpdateMessage->SetInnerRML("[UPDATE_AVAILABLE]");
+            set_text_content(mUpdateMessage, "[UPDATE_AVAILABLE]");
             if (mUpdateDownloadLabel != nullptr) {
-                mUpdateDownloadLabel->SetInnerRML(
-                    "[DOWNLOAD] " + escape(update_release_label(sUpdateCheckResult->latest)));
+                set_text_content(mUpdateDownloadLabel,
+                    fmt::format("[DOWNLOAD] {}",
+                        update_release_label(sUpdateCheckResult->latest)));
             }
         } else {
             mUpdateStatus->SetAttribute("state", "failed");
-            mUpdateMessage->SetInnerRML("[FAILED_TO_CHECK_FOR_UPDATES]");
+            set_text_content(mUpdateMessage, "[FAILED_TO_CHECK_FOR_UPDATES]");
         }
     }
 
     Document::update();
+}
+
+void return_to_prelaunch() noexcept {
+    close_all_documents();
+    push_document(std::make_unique<Prelaunch>(), true);
 }
 
 bool Prelaunch::focus() {

@@ -10,25 +10,19 @@
 
 namespace dusk::ui {
 
-CrashReportWindow::CrashReportWindow() : WindowSmall("modal", "modal-dialog") {
-    mDialog->SetClass("modal-dialog", true);
+CrashReportWindow::CrashReportWindow() : WindowSmall("modal") {
+    auto* header = append(mDialog, "modal-header");
 
-    auto* header = append(mDialog, "div");
-    header->SetClass("modal-header", true);
-
-    auto* title = append(header, "div");
-    title->SetClass("modal-title", true);
+    auto* title = append(header, "modal-title");
     title->SetInnerRML("[SEND_CRASH_REPORTS]");
 
     auto* headIcon = append(header, "icon");
     headIcon->SetClass("question-mark", true);
 
-    auto* intro = append(mDialog, "div");
-    intro->SetClass("modal-body", true);
+    auto* intro = append(mDialog, "modal-body");
     intro->SetInnerRML("[CRASH_REPORTING_INTRO]");
 
-    auto* grid = append(mDialog, "div");
-    grid->SetClass("preset-grid", true);
+    auto* grid = append(mDialog, "preset-grid");
 
     struct OptionInfo {
         const char* name;
@@ -46,22 +40,21 @@ CrashReportWindow::CrashReportWindow() : WindowSmall("modal", "modal-dialog") {
     };
 
     for (const auto& option : kOptions) {
-        auto* col = append(grid, "div");
-        col->SetClass("preset-col", true);
+        auto* col = append(grid, "preset-option");
 
         auto btn = std::make_unique<Button>(col, Rml::String(option.name));
         btn->on_nav_command([this, apply = option.apply](Rml::Event&, NavCommand cmd) {
             if (cmd == NavCommand::Confirm) {
                 apply();
                 hide(true);
+                mDoAud_seStartMenu(kSoundClick);
                 return true;
             }
             return false;
         });
         mButtons.push_back(std::move(btn));
 
-        auto* desc = append(col, "div");
-        desc->SetClass("preset-desc", true);
+        auto* desc = append(col, "preset-description");
         desc->SetInnerRML(option.desc);
     }
 }

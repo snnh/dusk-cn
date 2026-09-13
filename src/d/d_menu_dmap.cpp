@@ -21,16 +21,15 @@
 #include "d/d_msg_string.h"
 #include "d/d_meter_haihai.h"
 #include "d/d_menu_window.h"
-#include "dusk/settings.h"
 #include "f_op/f_op_msg_mng.h"
 #include "m_Do/m_Do_graphic.h"
 #include <cstring>
 
+#if TARGET_PC
+#include "dusk/interp/frame_interpolation.h"
+#include "dusk/settings.h"
 #include "dusk/version.hpp"
 #include "helpers/string.hpp"
-
-#if TARGET_PC
-#include "dusk/frame_interpolation.h"
 #endif
 
 #if (PLATFORM_WII || PLATFORM_SHIELD)
@@ -363,13 +362,15 @@ void dMenu_DmapBg_c::buttonIconScreenInit() {
 
     for (int i = 0; i < 5; i++) {
         #if TARGET_PC
-        if (dusk::version::isRegionJpn()) {
+        if (dusk::version::isJpnOrLessThanWiiJpn()) {
             ((J2DTextBox*)mButtonScreen->search(cont_at[i]))->setFont(mDoExt_getMesgFont());
             ((J2DTextBox*)mButtonScreen->search(cont_bt[i]))->setFont(mDoExt_getMesgFont());
             ((J2DTextBox*)mButtonScreen->search(cont_at[i]))->setString(32, "");
             ((J2DTextBox*)mButtonScreen->search(cont_bt[i]))->setString(32, "");
-            ((J2DTextBox*)mButtonScreen->search(font_at[i]))->hide();
-            ((J2DTextBox*)mButtonScreen->search(font_bt[i]))->hide();
+            if (dusk::version::getGameVersion() >= dusk::version::GameVersion::WiiJpn) {
+                ((J2DTextBox*)mButtonScreen->search(font_at[i]))->hide();
+                ((J2DTextBox*)mButtonScreen->search(font_bt[i]))->hide();
+            }
         } else {
             ((J2DTextBox*)mButtonScreen->search(font_at[i]))->setFont(mDoExt_getMesgFont());
             ((J2DTextBox*)mButtonScreen->search(font_bt[i]))->setFont(mDoExt_getMesgFont());
@@ -400,7 +401,7 @@ void dMenu_DmapBg_c::buttonIconScreenInit() {
 
     J2DTextBox* textBox;
     for (int i = 0; i < 2; i++) {
-        textBox = ((J2DTextBox*)mButtonScreen->search(DUSK_IF_ELSE(dusk::version::isRegionJpn() ? c_tag_jpn[i] : c_tag[i], c_tag[i])));
+        textBox = (J2DTextBox*)mButtonScreen->search(DUSK_IF_ELSE(dusk::version::isJpnOrLessThanWiiJpn() ? c_tag_jpn[i] : c_tag[i], c_tag[i]));
         textBox->setFont(mDoExt_getMesgFont());
         textBox->setString(32, "");
     }
@@ -436,9 +437,9 @@ void dMenu_DmapBg_c::setAButtonString(u32 i_msgNo) {
 
     for (int i = 0; i < 5; i++) {
         if (i_msgNo == 0) {
-            SAFE_STRCPY(((J2DTextBox*)mButtonScreen->search(DUSK_IF_ELSE(dusk::version::isRegionJpn() ? cont_at_jpn[i] : cont_at[i], cont_at[i])))->getStringPtr(), "");
+            SAFE_STRCPY(((J2DTextBox*)mButtonScreen->search(DUSK_IF_ELSE(dusk::version::isJpnOrLessThanWiiJpn() ? cont_at_jpn[i] : cont_at[i], cont_at[i])))->getStringPtr(), "");
         } else {
-            dMeter2Info_getStringKanji(i_msgNo, ((J2DTextBox*)mButtonScreen->search(DUSK_IF_ELSE(dusk::version::isRegionJpn() ? cont_at_jpn[i] : cont_at[i], cont_at[i])))->getStringPtr(), NULL);
+            dMeter2Info_getStringKanji(i_msgNo, ((J2DTextBox*)mButtonScreen->search(DUSK_IF_ELSE(dusk::version::isJpnOrLessThanWiiJpn() ? cont_at_jpn[i] : cont_at[i], cont_at[i])))->getStringPtr(), NULL);
         }
     }
 }
@@ -463,9 +464,9 @@ void dMenu_DmapBg_c::setBButtonString(u32 i_msgNo) {
 
     for (int i = 0; i < 5; i++) {
         if (i_msgNo == 0) {
-            SAFE_STRCPY(((J2DTextBox*)mButtonScreen->search(DUSK_IF_ELSE(dusk::version::isRegionJpn() ? cont_bt_jpn[i] : cont_bt[i], cont_bt[i])))->getStringPtr(), "");
+            SAFE_STRCPY(((J2DTextBox*)mButtonScreen->search(DUSK_IF_ELSE(dusk::version::isJpnOrLessThanWiiJpn() ? cont_bt_jpn[i] : cont_bt[i], cont_bt[i])))->getStringPtr(), "");
         } else {
-            dMeter2Info_getStringKanji(i_msgNo, ((J2DTextBox*)mButtonScreen->search(DUSK_IF_ELSE(dusk::version::isRegionJpn() ? cont_bt_jpn[i] : cont_bt[i], cont_bt[i])))->getStringPtr(), NULL);
+            dMeter2Info_getStringKanji(i_msgNo, ((J2DTextBox*)mButtonScreen->search(DUSK_IF_ELSE(dusk::version::isJpnOrLessThanWiiJpn() ? cont_bt_jpn[i] : cont_bt[i], cont_bt[i])))->getStringPtr(), NULL);
         }
     }
 }
@@ -504,12 +505,12 @@ void dMenu_DmapBg_c::setCButtonString(u32 i_msgNo) {
 
     if (msgNo == 0) {
         for (i = 0; i < 2; i++) {
-            SAFE_STRCPY(((J2DTextBox*)mButtonScreen->search(DUSK_IF_ELSE(dusk::version::isRegionJpn() ? c_tag_jpn[i] : c_tag[i], c_tag[i])))->getStringPtr(), "");
+            SAFE_STRCPY(((J2DTextBox*)mButtonScreen->search(DUSK_IF_ELSE(dusk::version::isJpnOrLessThanWiiJpn() ? c_tag_jpn[i] : c_tag[i], c_tag[i])))->getStringPtr(), "");
         }
         mpCButton->setAlphaRate(0.5f);
     } else {
         for (i = 0; i < 2; i++) {
-            dMeter2Info_getStringKanji(msgNo, ((J2DTextBox*)mButtonScreen->search(DUSK_IF_ELSE(dusk::version::isRegionJpn() ? c_tag_jpn[i] : c_tag[i], c_tag[i])))->getStringPtr(), NULL);
+            dMeter2Info_getStringKanji(msgNo, ((J2DTextBox*)mButtonScreen->search(DUSK_IF_ELSE(dusk::version::isJpnOrLessThanWiiJpn() ? c_tag_jpn[i] : c_tag[i], c_tag[i])))->getStringPtr(), NULL);
         }
         mpCButton->setAlphaRate(1.0f);
     }
@@ -979,8 +980,10 @@ void dMenu_DmapBg_c::dMapBgWide() {
     mButtonScreen->search(MULTI_CHAR('c_btn'))->scale(mDoGph_gInf_c::hudAspectScaleDown, 1.0f);
     mButtonScreen->search(MULTI_CHAR('c_text_s'))->scale(mDoGph_gInf_c::hudAspectScaleDown, 1.0f);
     mButtonScreen->search(MULTI_CHAR('c_text'))->scale(mDoGph_gInf_c::hudAspectScaleDown, 1.0f);
-    mButtonScreen->search(MULTI_CHAR('f_text_s'))->scale(mDoGph_gInf_c::hudAspectScaleDown, 1.0f);
-    mButtonScreen->search(MULTI_CHAR('f_text'))->scale(mDoGph_gInf_c::hudAspectScaleDown, 1.0f);
+    if (dusk::version::getGameVersion() >= dusk::version::GameVersion::WiiJpn) {
+        mButtonScreen->search(MULTI_CHAR('f_text_s'))->scale(mDoGph_gInf_c::hudAspectScaleDown, 1.0f);
+        mButtonScreen->search(MULTI_CHAR('f_text'))->scale(mDoGph_gInf_c::hudAspectScaleDown, 1.0f);
+    }
 
     // Decorations
     mButtonScreen->search(MULTI_CHAR('kazari_n'))->scale(mDoGph_gInf_c::hudAspectScaleDown, 1.0f);
@@ -1109,7 +1112,7 @@ void dMenu_DmapBg_c::draw() {
             -35.0f + (local_224.x - local_218.x),
             -35.0f + (local_224.y - local_218.y));
 #if TARGET_PC
-        if (!dusk::frame_interp::is_enabled()) {
+        if (!dusk::interp::is_enabled()) {
             field_0xdda = 0;
         }
 #else
@@ -2771,7 +2774,7 @@ void dMenu_Dmap_c::zoomIn_proc() {
 
 void dMenu_Dmap_c::zoomOut_init_proc() {
 #if TARGET_PC
-    if (dusk::frame_interp::is_enabled()) {
+    if (dusk::interp::is_enabled()) {
         mpDrawBg->resetScrollArrowMask();
     }
 #endif

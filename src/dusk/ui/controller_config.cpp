@@ -292,10 +292,9 @@ void ControllerConfigWindow::build_port_tab(Rml::Element* content, int port) {
     mActivePort = port;
 
     auto addPageButton = [this, &leftPane, &rightPane, port](
-                             Page page, Rml::String key, auto getValue, auto isDisabled) {
-        leftPane.register_control(leftPane.add_select_button({
-                                      .key = std::move(key),
-                                      .getValue = std::move(getValue),
+                             Page page, Rml::String text, std::function<bool()> isDisabled = {}) {
+        leftPane.register_control(leftPane.add_group_button({
+                                      .text = std::move(text),
                                       .isDisabled = std::move(isDisabled),
                                   }),
             rightPane, [this, port, page](Pane& pane) {
@@ -304,12 +303,20 @@ void ControllerConfigWindow::build_port_tab(Rml::Element* content, int port) {
             });
     };
 
-    addPageButton(Page::Controller, "[CONTROLLER]", [port] { return current_controller_name(port); }, [] { return false; });
-    addPageButton(Page::Buttons, "[BUTTONS]", [] { return Rml::String(">"); }, [] { return false; });
-    addPageButton(Page::Triggers, "[TRIGGERS]", [] { return Rml::String(">"); }, [] { return false; });
-    addPageButton(Page::Sticks, "[STICKS]", [] { return Rml::String(">"); }, [] { return false; });
-    addPageButton(Page::Rumble, "[RUMBLE]", [] { return Rml::String(">"); }, [port] { return !PADSupportsRumbleIntensity(static_cast<u32>(port)); });
-    addPageButton(Page::Actions, "[CUSTOM_ACTION_BINDINGS]", [] {return Rml::String(">"); }, [] { return false; });
+    leftPane.register_control(leftPane.add_select_button({
+                                  .key = "[CONTROLLER]",
+                                  .getValue = [port] { return current_controller_name(port); },
+                              }),
+        rightPane, [this, port](Pane& pane) {
+            mPage = Page::Controller;
+            render_page(pane, port, Page::Controller);
+        });
+    addPageButton(Page::Buttons, "[BUTTONS]");
+    addPageButton(Page::Triggers, "[TRIGGERS]");
+    addPageButton(Page::Sticks, "[STICKS]");
+    addPageButton(Page::Rumble, "[RUMBLE]",
+        [port] { return !PADSupportsRumbleIntensity(static_cast<u32>(port)); });
+    addPageButton(Page::Actions, "[CUSTOM_ACTION_BINDINGS]");
 
     leftPane.add_section("[OPTIONS]");
     leftPane.register_control(leftPane.add_child<BoolButton>(BoolButton::Props{

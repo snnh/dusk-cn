@@ -76,6 +76,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL Linux)
 endif ()
 set(AURORA_ENABLE_DVD ON CACHE BOOL "Enable DVD API support" FORCE)
 set(AURORA_ENABLE_CARD ON CACHE BOOL "Enable CARD API support" FORCE)
+set(AURORA_ENABLE_THP ON CACHE BOOL "Enable THP decoder" FORCE)
 set(AURORA_ENABLE_RMLUI ON CACHE BOOL "Enable RmlUi UI support" FORCE)
 include(cmake/ApplyAuroraPatch.cmake)
 dusk_apply_aurora_patch(
@@ -96,10 +97,11 @@ endif ()
 
 option(DUSK_BUILD_WARNINGS "Enable compiler warnings (off by default)")
 option(DUSK_SELECTED_OPT "If on, selected parts of the project will be compiled with optimizations on Debug, intending to make the game run at 30 FPS. Note for MSVC: you will need to remove '/RTC1' from your debug flags in CMake.")
-option(DUSK_MOVIE_SUPPORT "If on, compile against libjpeg-turbo to enable THP file decoding" ON)
 option(DUSK_PACKAGE_INSTALL "Install Dusklight with a Linux-native file structure" OFF)
 option(DUSK_GFX_DEBUG_GROUPS "Report debug groups to the native graphics API" ${DUSK_GFX_DEBUG_GROUPS_DEFAULT})
-option(DUSK_ENABLE_CODE_MODS "Enable code mods" OFF)
+option(DUSK_ENABLE_CODE_MODS "Enable code mods" ON)
+option(DUSK_ENABLE_OPUS "Enable loading Opus audio files for mods" OFF)
+
 
 set(DUSK_HAS_FUNCHOOK OFF)
 if (DUSK_ENABLE_CODE_MODS AND (NOT APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
@@ -138,69 +140,6 @@ if (MSVC)
     endif ()
     if (CMAKE_MSVC_DEBUG_INFORMATION_FORMAT STREQUAL "EditAndContinue")
         add_link_options("/INCREMENTAL")
-    endif ()
-endif ()
-
-if (DUSK_MOVIE_SUPPORT)
-    find_package(libjpeg-turbo 3.0 CONFIG QUIET)
-    if (libjpeg-turbo_FOUND)
-        message(STATUS "dusklight: Using system libjpeg-turbo")
-    else ()
-        message(STATUS "dusklight: Fetching libjpeg-turbo")
-        include(ExternalProject)
-        set(_jpeg_install_dir ${CMAKE_BINARY_DIR}/libjpeg-turbo-install)
-        if (WIN32)
-            set(_jpeg_lib ${_jpeg_install_dir}/lib/turbojpeg-static.lib)
-        else ()
-            set(_jpeg_lib ${_jpeg_install_dir}/lib/libturbojpeg.a)
-        endif ()
-        set(_jpeg_cmake_args
-            -DCMAKE_INSTALL_PREFIX=${_jpeg_install_dir}
-            -DCMAKE_PROJECT_INCLUDE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/WindowsTargetProcessor.cmake
-            -DENABLE_SHARED=OFF
-            -DWITH_TURBOJPEG=ON
-            -DWITH_JAVA=OFF
-            -DCMAKE_INSTALL_LIBDIR=lib
-        )
-        if (CMAKE_TOOLCHAIN_FILE)
-            get_filename_component(_jpeg_toolchain_file "${CMAKE_TOOLCHAIN_FILE}" ABSOLUTE BASE_DIR "${CMAKE_SOURCE_DIR}")
-            list(APPEND _jpeg_cmake_args -DCMAKE_TOOLCHAIN_FILE=${_jpeg_toolchain_file})
-        endif ()
-        set(_jpeg_passthrough_vars
-            ANDROID_ABI
-            ANDROID_PLATFORM
-            CMAKE_BUILD_TYPE
-            CMAKE_C_COMPILER
-            CMAKE_C_COMPILER_LAUNCHER
-            CMAKE_MAKE_PROGRAM
-            CMAKE_MSVC_RUNTIME_LIBRARY
-            CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
-            CMAKE_OSX_ARCHITECTURES
-            CMAKE_OSX_DEPLOYMENT_TARGET
-            CMAKE_OSX_SYSROOT
-            DEPLOYMENT_TARGET
-            ENABLE_ARC
-            ENABLE_BITCODE
-            PLATFORM
-        )
-        foreach(_var IN LISTS _jpeg_passthrough_vars)
-            if (DEFINED ${_var})
-                list(APPEND _jpeg_cmake_args -D${_var}=${${_var}})
-            endif ()
-        endforeach ()
-        ExternalProject_Add(libjpeg-turbo-ext
-            URL https://github.com/libjpeg-turbo/libjpeg-turbo/archive/refs/tags/3.1.0.tar.gz
-            URL_HASH SHA256=35fec2e1ddfb05ecf6d93e50bc57c1e54bc81c16d611ddf6eff73fff266d8285
-            CMAKE_ARGS ${_jpeg_cmake_args}
-            BUILD_BYPRODUCTS ${_jpeg_lib}
-        )
-        file(MAKE_DIRECTORY ${_jpeg_install_dir}/include)
-        add_library(libjpeg-turbo::turbojpeg-static STATIC IMPORTED GLOBAL)
-        set_target_properties(libjpeg-turbo::turbojpeg-static PROPERTIES
-            IMPORTED_LOCATION ${_jpeg_lib}
-            INTERFACE_INCLUDE_DIRECTORIES ${_jpeg_install_dir}/include
-        )
-        add_dependencies(libjpeg-turbo::turbojpeg-static libjpeg-turbo-ext)
     endif ()
 endif ()
 
@@ -251,8 +190,34 @@ FetchContent_Declare(miniz
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     EXCLUDE_FROM_ALL
 )
+message(STATUS "dusklight: Fetching PicoSHA2")
+FetchContent_Declare(picosha2
+    URL https://github.com/okdshin/PicoSHA2/archive/refs/tags/v1.0.1.tar.gz
+    URL_HASH SHA256=9983136544234e573fe07cc1a22fdf978ad7979043e7be2e9082f6d4991ff8a8
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    EXCLUDE_FROM_ALL
+)
 
-set(_fetch_content_deps miniz)
+set(_fetch_content_deps miniz picosha2)
+
+if (DUSK_ENABLE_OPUS)
+    message(STATUS "dusklight: Fetching opusfile")
+
+    # Opusfile options
+    SET(OP_DISABLE_HTTP ON CACHE BOOL "" FORCE)
+    SET(OP_DISABLE_DOCS ON CACHE BOOL "" FORCE)
+    SET(OP_DISABLE_EXAMPLES ON CACHE BOOL "" FORCE)
+
+    message(STATUS "dusklight: Fetching opusfile")
+    FetchContent_Declare(
+        opusfile
+        GIT_REPOSITORY https://github.com/xiph/opusfile.git
+        GIT_TAG        6dfd29e7adb87f2e193575fc3fa88cbf1a0b27df
+    )
+
+    list(APPEND _fetch_content_deps opusfile)
+endif ()
+
 if (DUSK_HAS_FUNCHOOK)
     message(STATUS "dusklight: Fetching funchook")
     # cmake/PatchFunchook.cmake patches funchook's cmake/capstone.cmake.in to inject a
@@ -287,6 +252,14 @@ if (DUSK_HAS_FUNCHOOK)
 endif ()
 FetchContent_MakeAvailable(${_fetch_content_deps})
 
+if (DUSK_HAS_FUNCHOOK AND APPLE)
+    target_sources(funchook-static PRIVATE src/dusk/mods/loader/code_patch_macos.cpp)
+    target_include_directories(funchook-static PRIVATE src/dusk/mods/loader)
+    set_source_files_properties(src/dusk/mods/loader/code_patch_macos.cpp
+            TARGET_DIRECTORY funchook-static PROPERTIES
+            COMPILE_OPTIONS "-O2;-fno-sanitize=all;-fno-stack-protector")
+endif ()
+
 # Use signed char on ARM to match the original game (and x86)
 string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _arch)
 if(_arch MATCHES "^(arm|aarch64)" AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "GNU")
@@ -311,24 +284,19 @@ include(cmake/GameABIConfig.cmake)
 
 find_package(Threads REQUIRED)
 set(GAME_COMPILE_DEFS DUSK_BUILDING_GAME=1 DUSK_TPHD=1)
-set(GAME_LIBS aurora::core aurora::gx aurora::gd aurora::si aurora::vi aurora::pad aurora::mtx aurora::os aurora::dvd
-    aurora::card borealis::cli borealis::crash borealis::data borealis::disc borealis::discord borealis::file_select borealis::log borealis::presentation borealis::sentry borealis::update freeverb cxxopts::cxxopts absl::flat_hash_map nlohmann_json::nlohmann_json TracyClient fmt::fmt
-    Threads::Threads zstd::libzstd ZLIB::ZLIB dusklight_game_headers)
+set(GAME_LIBS aurora::core aurora::gx aurora::gd aurora::si aurora::vi aurora::pad aurora::mtx aurora::os aurora::dvd aurora::thp
+    aurora::card borealis::http borealis::cli borealis::crash borealis::data borealis::disc borealis::discord borealis::file_select borealis::io borealis::log borealis::net borealis::presentation borealis::sentry borealis::update borealis::ws freeverb cxxopts::cxxopts absl::flat_hash_map nlohmann_json::nlohmann_json TracyClient fmt::fmt
+    Threads::Threads zstd::libzstd ZLIB::ZLIB dusklight_game_headers picosha2 PNG::PNG)
 if (DUSK_HAS_FUNCHOOK)
     list(APPEND GAME_LIBS funchook-static)
+endif ()
+if (DUSK_ENABLE_OPUS)
+    list(APPEND GAME_LIBS OpusFile::opusfile)
+    list(APPEND GAME_COMPILE_DEFS DUSK_OPUS=1)
 endif ()
 
 if (WIN32)
     list(APPEND GAME_LIBS Ws2_32)
-endif ()
-
-if (DUSK_MOVIE_SUPPORT)
-    if (TARGET libjpeg-turbo::turbojpeg-static)
-        list(APPEND GAME_LIBS libjpeg-turbo::turbojpeg-static)
-    else ()
-        list(APPEND GAME_LIBS libjpeg-turbo::turbojpeg)
-    endif ()
-    list(APPEND GAME_COMPILE_DEFS MOVIE_SUPPORT=1)
 endif ()
 
 if (DUSK_ENABLE_CODE_MODS)
@@ -392,20 +360,31 @@ if (CMAKE_CXX_LINK_GROUP_USING_RESCAN_SUPPORTED OR CMAKE_LINK_GROUP_USING_RESCAN
     set(JSYSTEM_LINK_LIBRARIES "$<LINK_GROUP:RESCAN,${JSYSTEM_LIBRARIES}>")
 endif ()
 
-set(DUSK_FILES src/dusk/main.cpp ${GAME_BASE_FILES} ${GAME_DEBUG_FILES} ${miniz_SOURCE_DIR}/miniz.c)
+set(_dusklight_all_files src/dusk/main.cpp ${GAME_BASE_FILES} ${GAME_DEBUG_FILES})
+set(DUSK_INTERNAL_FILES ${_dusklight_all_files})
+list(FILTER DUSK_INTERNAL_FILES INCLUDE REGEX "^src/dusk/")
+set(GAME_FILES ${_dusklight_all_files})
+list(FILTER GAME_FILES EXCLUDE REGEX "^src/dusk/")
+
+add_library(dusk_internal OBJECT ${DUSK_INTERNAL_FILES})
+if (ENABLE_ASAN)
+    target_sources(dusk_internal PRIVATE src/dusk/asan_options.c)
+endif ()
+target_compile_definitions(dusk_internal PRIVATE ${GAME_COMPILE_DEFS})
+target_include_directories(dusk_internal PRIVATE ${miniz_SOURCE_DIR})
+target_link_libraries(dusk_internal PRIVATE aurora::main ${GAME_LIBS} ${JSYSTEM_LIBRARIES})
+target_precompile_headers(dusk_internal PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_SOURCE_DIR}/include/dusk_pch.hpp>")
+
 if(ANDROID)
-    add_library(dusklight SHARED ${DUSK_FILES})
+    add_library(dusklight SHARED ${GAME_FILES} ${miniz_SOURCE_DIR}/miniz.c)
 else ()
-    add_executable(dusklight ${DUSK_FILES})
+    add_executable(dusklight ${GAME_FILES} ${miniz_SOURCE_DIR}/miniz.c)
 endif ()
 borealis_configure_android_application(dusklight)
-if (ENABLE_ASAN)
-    target_sources(dusklight PRIVATE src/dusk/asan_options.c)
-endif ()
 
 target_compile_definitions(dusklight PRIVATE ${GAME_COMPILE_DEFS})
 target_include_directories(dusklight PRIVATE ${miniz_SOURCE_DIR})
-target_link_libraries(dusklight PRIVATE aurora::main ${GAME_LIBS} ${JSYSTEM_LINK_LIBRARIES})
+target_link_libraries(dusklight PRIVATE dusk_internal aurora::main ${GAME_LIBS} ${JSYSTEM_LINK_LIBRARIES})
 target_precompile_headers(dusklight PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_SOURCE_DIR}/include/dusk_pch.hpp>")
 
 if (DUSK_ENABLE_CODE_MODS)
@@ -419,38 +398,77 @@ if (DUSK_ENABLE_CODE_MODS)
     setup_symbol_manifest(dusklight)
 endif ()
 
-# Hook reliability: guaranteed patchable entries on the game ABI surface, and no identical-code folding.
-if (MSVC)
-    if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-        set(DUSK_PATCHABLE_ENTRY_FLAG $<$<COMPILE_LANGUAGE:C,CXX>:/hotpatch>)
-    endif ()
-    if (CMAKE_SYSTEM_PROCESSOR STREQUAL "ARM64")
-        target_link_options(dusklight PRIVATE /FUNCTIONPADMIN:16 /OPT:NOICF)
-    else ()
-        target_link_options(dusklight PRIVATE /FUNCTIONPADMIN /OPT:NOICF)
-    endif ()
-elseif (CMAKE_CXX_COMPILER_ID MATCHES "^(AppleClang|Clang)$")
-    if (CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64" OR CMAKE_OSX_ARCHITECTURES MATCHES "arm64")
-        set(DUSK_PATCHABLE_ENTRY_FLAG $<$<COMPILE_LANGUAGE:C,CXX>:-fpatchable-function-entry=2,1>)
-    else ()
-        set(DUSK_PATCHABLE_ENTRY_FLAG $<$<COMPILE_LANGUAGE:C,CXX>:-fpatchable-function-entry=10,5>)
-    endif ()
-endif ()
-
-if (DEFINED DUSK_PATCHABLE_ENTRY_FLAG)
-    target_compile_options(dusklight PRIVATE ${DUSK_PATCHABLE_ENTRY_FLAG})
-    foreach(jsystem_lib IN LISTS JSYSTEM_LIBRARIES)
-        target_compile_options(${jsystem_lib} PRIVATE ${DUSK_PATCHABLE_ENTRY_FLAG})
-    endforeach()
-    foreach(_sdk_lib aurora_card aurora_core aurora_dvd aurora_gd aurora_gx aurora_mtx
-            aurora_os aurora_pad aurora_si aurora_vi)
-        if (TARGET ${_sdk_lib})
-            get_target_property(_sdk_lib_imported ${_sdk_lib} IMPORTED)
-            if (NOT _sdk_lib_imported)
-                target_compile_options(${_sdk_lib} PRIVATE ${DUSK_PATCHABLE_ENTRY_FLAG})
-            endif ()
+# Hook reliability: prevent auto-inlining, guarantee patchable function entries,
+# and disable identical-code folding for game functions.
+if (DUSK_ENABLE_CODE_MODS)
+    set(DUSK_GAME_ABI_INLINE_OPTIONS)
+    if (CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "GNU")
+        if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+            list(APPEND DUSK_GAME_ABI_INLINE_OPTIONS
+                    $<$<COMPILE_LANGUAGE:CXX>:-finline-hint-functions>)
+        elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+            list(APPEND DUSK_GAME_ABI_INLINE_OPTIONS
+                    $<$<COMPILE_LANGUAGE:CXX>:-flive-patching=inline-clone>
+                    $<$<COMPILE_LANGUAGE:CXX>:-fno-inline-functions>
+                    $<$<COMPILE_LANGUAGE:CXX>:-fno-inline-small-functions>
+                    $<$<COMPILE_LANGUAGE:CXX>:-fno-inline-functions-called-once>
+                    $<$<COMPILE_LANGUAGE:CXX>:-fno-early-inlining>
+                    $<$<COMPILE_LANGUAGE:CXX>:-fno-ipa-cp>
+                    $<$<COMPILE_LANGUAGE:CXX>:-fno-ipa-cp-clone>
+                    $<$<COMPILE_LANGUAGE:CXX>:-fno-ipa-sra>
+                    $<$<COMPILE_LANGUAGE:CXX>:-fno-partial-inlining>)
         endif ()
-    endforeach ()
+    endif ()
+
+    if (DUSK_GAME_ABI_INLINE_OPTIONS)
+        target_compile_options(dusklight PRIVATE ${DUSK_GAME_ABI_INLINE_OPTIONS})
+
+        foreach(jsystem_lib IN LISTS JSYSTEM_LIBRARIES)
+            target_compile_options(${jsystem_lib} PRIVATE ${DUSK_GAME_ABI_INLINE_OPTIONS})
+        endforeach()
+        foreach(_sdk_lib aurora_card aurora_core aurora_dvd aurora_gd aurora_gx aurora_mtx
+                aurora_os aurora_pad aurora_si aurora_vi)
+            if (TARGET ${_sdk_lib})
+                get_target_property(_sdk_lib_imported ${_sdk_lib} IMPORTED)
+                if (NOT _sdk_lib_imported)
+                    target_compile_options(${_sdk_lib} PRIVATE ${DUSK_GAME_ABI_INLINE_OPTIONS})
+                endif ()
+            endif ()
+        endforeach ()
+    endif ()
+
+    if (MSVC)
+        if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+            set(DUSK_PATCHABLE_ENTRY_FLAG $<$<COMPILE_LANGUAGE:C,CXX>:/hotpatch>)
+        endif ()
+        if (CMAKE_SYSTEM_PROCESSOR STREQUAL "ARM64")
+            target_link_options(dusklight PRIVATE /FUNCTIONPADMIN:16 /OPT:NOICF)
+        else ()
+            target_link_options(dusklight PRIVATE /FUNCTIONPADMIN /OPT:NOICF)
+        endif ()
+    elseif (CMAKE_CXX_COMPILER_ID MATCHES "^(AppleClang|Clang|GNU)$")
+        if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64)$" OR CMAKE_OSX_ARCHITECTURES MATCHES "arm64")
+            set(DUSK_PATCHABLE_ENTRY_FLAG $<$<COMPILE_LANGUAGE:C,CXX>:-fpatchable-function-entry=2,1>)
+        else ()
+            set(DUSK_PATCHABLE_ENTRY_FLAG $<$<COMPILE_LANGUAGE:C,CXX>:-fpatchable-function-entry=10,4>)
+        endif ()
+    endif ()
+
+    if (DEFINED DUSK_PATCHABLE_ENTRY_FLAG)
+        target_compile_options(dusklight PRIVATE ${DUSK_PATCHABLE_ENTRY_FLAG})
+        foreach(jsystem_lib IN LISTS JSYSTEM_LIBRARIES)
+            target_compile_options(${jsystem_lib} PRIVATE ${DUSK_PATCHABLE_ENTRY_FLAG})
+        endforeach()
+        foreach(_sdk_lib aurora_card aurora_core aurora_dvd aurora_gd aurora_gx aurora_mtx
+                aurora_os aurora_pad aurora_si aurora_vi)
+            if (TARGET ${_sdk_lib})
+                get_target_property(_sdk_lib_imported ${_sdk_lib} IMPORTED)
+                if (NOT _sdk_lib_imported)
+                    target_compile_options(${_sdk_lib} PRIVATE ${DUSK_PATCHABLE_ENTRY_FLAG})
+                endif ()
+            endif ()
+        endforeach ()
+    endif ()
 endif ()
 
 if (WIN32)
@@ -523,10 +541,16 @@ include(cmake/ModSDK.cmake)
 
 if (DUSK_ENABLE_CODE_MODS AND CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     add_custom_target(dusklight_mods) # Aggregate target for all in-tree mods
+    add_subdirectory(mods/luau_runtime)
     add_subdirectory(mods/template_mod)
     add_subdirectory(mods/ao_mod)
     add_subdirectory(mods/shadow_mod)
     add_subdirectory(mods/window_demo)
+    add_subdirectory(mods/flow_demo)
+    add_subdirectory(mods/custom_actor_demo)
+    add_subdirectory(mods/cosmetics)
+    add_subdirectory(mods/randomizer)
+    add_subdirectory(mods/audio_mod)
 endif ()
 
 if (APPLE)

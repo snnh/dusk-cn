@@ -14,8 +14,10 @@
 #include "d/d_meter2_info.h"
 #include "d/d_msg_object.h"
 #include "d/d_s_play.h"
-#include "dusk/frame_interpolation.h"
+#if TARGET_PC
+#include "dusk/interp/frame_interpolation.h"
 #include "dusk/tphd/LosTable.hpp"
+#endif
 
 static f32 dummy_lit_3777(int idx, u8 foo) {
     Vec dummy_vec = {0.0f, 0.0f, 0.0f};
@@ -497,6 +499,7 @@ int daMidna_c::createHeap() {
         }
     }
 
+    IF_DUSK(mBckHeap[0].reserveBuffer(0x1DC);)
     JKRReadIdxResource(mBckHeap[0].getBuffer(), mBckHeap[0].getBufferSize(), 0x1DC, dComIfGp_getAnmArchive());
     J3DAnmTransform* md_anm = (J3DAnmTransform*)J3DAnmLoaderDataBase::load(mBckHeap[0].getBuffer());
     modelData = (J3DModelData*)dComIfG_getObjectRes(l_arcName, 14);
@@ -510,7 +513,7 @@ int daMidna_c::createHeap() {
             if (name != NULL && strcmp(name, "midona_eye") == 0) {
                 ResTIMG* timg = tex->getResTIMG(i);
                 timg->mipmapEnabled = false;
-                tex->loadGXTexObj(i);
+                tex->initGXTexObj(i);
                 break;
             }
         }
@@ -1107,10 +1110,10 @@ void daMidna_c::setBodyPartMatrix() {
             mpModel->setAnmMtx(i, mpShadowModel->getAnmMtx(i));
         }
         mpModel->calcWeightEnvelopeMtx();
-#ifdef TARGET_PC
+#if TARGET_PC
         // FRAME INTERP NOTE: Record weight envelopes for Midna here, as they are otherwise missed causing distortion
         for (u16 i = 0; i < mpModel->getModelData()->getWEvlpMtxNum(); i++) {
-            dusk::frame_interp::record_final_mtx(mpModel->getWeightAnmMtx(i));
+            dusk::interp::record_final_mtx(mpModel->getWeightAnmMtx(i));
         }
 #endif
     }
@@ -3301,7 +3304,7 @@ int daMidna_c::execute() {
             if (!checkStateFlg0(FLG0_UNK_8000)) {
                 offStateFlg0((daMidna_FLG0)(FLG0_NPC_NEAR | FLG0_NPC_FAR));
                 BOOL far_;
-                if (fopAcIt_Judge((fopAcIt_JudgeFunc)daMidna_searchNpc, &far_)) {
+                if (fopAcIt_Judge((fopAcIt_JudgeFunc)daMidna_searchNpc, &far_) IF_DUSK(&& !dusk::getSettings().game.canTransformAnywhere)) {
                     if (!far_) {
                         onStateFlg0(FLG0_NPC_NEAR);
                     } else {

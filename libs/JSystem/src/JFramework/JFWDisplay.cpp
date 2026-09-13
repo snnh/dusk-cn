@@ -12,17 +12,18 @@
 #include "global.h"
 #include <stdint.h>
 
-#ifdef TARGET_PC
+#if TARGET_PC
 #include "dusk/dusk.h"
-#include "dusk/frame_interpolation.h"
+#include "dusk/interp/frame_interpolation.h"
 #include "dusk/logging.h"
 #include "dusk/settings.h"
 #include "dusk/time.h"
-#include "f_op/f_op_overlap_mng.h"
 #include "helpers/gx_helper.h"
 
-#include "SDL3/SDL_timer.h"
-#include "tracy/Tracy.hpp"
+#include "f_op/f_op_overlap_mng.h"
+
+#include <SDL3/SDL_timer.h>
+#include <tracy/Tracy.hpp>
 
 #include <chrono>
 #endif
@@ -38,7 +39,7 @@ void JFWDisplay::ctor_subroutine(bool enableAlpha) {
     mTickRate = 0;
     mCombinationRatio = 0.0f;
     field_0x30 = 0;
-    field_0x2c = OSGetTick();
+    field_0x2c = DUSK_IF_ELSE(static_cast<OSTick>(OSGetNativeTime()), OSGetTick());
     field_0x34 = 0;
     field_0x48 = 0;
     field_0x4a = 0;
@@ -217,8 +218,8 @@ void JFWDisplay::endGX() {
 
     if (mFader != NULL) {
         ortho.setPort();
-#ifdef TARGET_PC
-        if (dusk::frame_interp::get_ui_tick_pending()) {
+#if TARGET_PC
+        if (dusk::interp::get_ui_tick_pending()) {
             mFader->advance();
         }
         if (mFader->getStatus() != JUTFader::Wait) {
@@ -258,7 +259,7 @@ void JFWDisplay::beginRender() {
     waitForTick(mTickRate, mFrameRate);
     JUTVideo::getManager()->waitRetraceIfNeed();
 
-    OSTick tick = OSGetTick();
+    OSTick tick = DUSK_IF_ELSE(static_cast<OSTick>(OSGetNativeTime()), OSGetTick());
     field_0x30 = tick - field_0x2c;
     field_0x2c = tick;
     field_0x34 = field_0x2c - JUTVideo::getVideoLastTick();
@@ -381,15 +382,12 @@ static void waitForTick(u32 p1, u16 p2) {
 #if TARGET_PC
     static Limiter limiter;
 
-    if (dusk::frame_interp::is_enabled() && !dusk::getTransientSettings().skipFrameRateLimit) {
+    if (dusk::interp::is_enabled() || dusk::getTransientSettings().turboMode) {
+        limiter.Reset();
         dusk::frameUsagePct = 0.f;
         return;
     }
 
-    if (dusk::getTransientSettings().skipFrameRateLimit) {
-        p1 = OS_TIMER_CLOCK / 120;
-    }
-    
     if (fopOvlpM_IsPeek() && dusk::getTransientSettings().stateShareLoadActive) {
         return;
     }
@@ -399,7 +397,6 @@ static void waitForTick(u32 p1, u16 p2) {
 
     if (p1 != 0) {
 #if TARGET_PC
-        static Limiter limiter;
         waitPrecise(limiter, static_cast<Uint64>(OSTicksToMicroseconds(p1)) * 1000ULL);
 #else
         static OSTime nextTick = OSGetTime();
@@ -413,7 +410,6 @@ static void waitForTick(u32 p1, u16 p2) {
     } else {
         u32 uVar1 = (p2 == 0) ? 1 : p2;
 #if TARGET_PC
-        static Limiter limiter;
         waitPrecise(limiter, static_cast<Uint64>((RETRACE_PERIOD * uVar1).count()));
 #else
         static u32 nextCount = VIGetRetraceCount();

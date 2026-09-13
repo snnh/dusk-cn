@@ -59,25 +59,20 @@ void applyPresetDusk() {
 
 }  // namespace
 
-PresetWindow::PresetWindow() : WindowSmall("modal", "modal-dialog") {
-    mDialog->SetClass("modal-dialog", true);
+PresetWindow::PresetWindow() : WindowSmall("modal") {
+    auto* header = append(mDialog, "modal-header");
 
-    auto* header = append(mDialog, "div");
-    header->SetClass("modal-header", true);
-
-    auto* title = append(header, "div");
-    title->SetClass("modal-title", true);
+    auto* title = append(header, "modal-title");
     title->SetInnerRML("[WELCOME_TO_DUSKLIGHT]");
 
     auto* headIcon = append(header, "icon");
     headIcon->SetClass("celebration", true);
 
-    auto* intro = append(mDialog, "div");
-    intro->SetClass("modal-body", true);
-    intro->SetInnerRML("[CHOOSE_A_PRESET_TO_GET_STARTED_YOU_CAN_CHANGE_ANY_SETTING_LATER_FROM_THE]");
+    auto* intro = append(mDialog, "modal-body");
+    intro->SetInnerRML(
+        "[CHOOSE_A_PRESET_TO_GET_STARTED_YOU_CAN_CHANGE_ANY_SETTING_LATER_FROM_THE]");
 
-    auto* grid = append(mDialog, "div");
-    grid->SetClass("preset-grid", true);
+    auto* grid = append(mDialog, "preset-grid");
 
     struct PresetInfo {
         const char* name;
@@ -95,8 +90,7 @@ PresetWindow::PresetWindow() : WindowSmall("modal", "modal-dialog") {
     };
 
     for (const auto& preset : kPresets) {
-        auto* col = append(grid, "div");
-        col->SetClass("preset-col", true);
+        auto* col = append(grid, "preset-option");
 
         auto btn = std::make_unique<Button>(col, Rml::String(preset.name));
         btn->on_nav_command([this, apply = preset.apply](Rml::Event&, NavCommand cmd) {
@@ -105,14 +99,14 @@ PresetWindow::PresetWindow() : WindowSmall("modal", "modal-dialog") {
                 getSettings().backend.wasPresetChosen.setValue(true);
                 config::save();
                 hide(true);
+                mDoAud_seStartMenu(kSoundClick);
                 return true;
             }
             return false;
         });
         mButtons.push_back(std::move(btn));
 
-        auto* desc = append(col, "div");
-        desc->SetClass("preset-desc", true);
+        auto* desc = append(col, "preset-description");
         desc->SetInnerRML(preset.desc);
     }
 }

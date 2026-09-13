@@ -1,22 +1,11 @@
 #include "pane.hpp"
 
-#include "i18n.hpp"
-
 #include "Z2AudioLib/Z2SeMgr.h"
 #include "m_Do/m_Do_audio.h"
 #include "ui.hpp"
 
 namespace dusk::ui {
 
-namespace {
-
-Rml::String translate_text(const Rml::String& text) {
-    Rml::String translated;
-    i18n::translate(translated, text);
-    return translated;
-}
-
-}  // namespace
 namespace {
 
 Rml::Element* createRoot(Rml::Element* parent) {
@@ -102,11 +91,6 @@ Pane::Pane(Rml::Element* parent, Type type) : FluentComponent(createRoot(parent)
     }
 }
 
-void Pane::update() {
-    finalize();
-    Component::update();
-}
-
 void Pane::set_selected_item(int index) {
     if (mType == Type::Uncontrolled) {
         return;
@@ -175,16 +159,24 @@ bool Pane::focus() {
     return false;
 }
 
+bool Pane::focus_last() {
+    for (auto child = mChildren.rbegin(); child != mChildren.rend(); ++child) {
+        if ((*child)->focus()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 Rml::Element* Pane::add_section(const Rml::String& text) {
-    auto* elem = append(mRoot, "div");
-    elem->SetClass("section-heading", true);
-    append_text(elem, translate_text(text));
+    auto* elem = append(mRoot, "section-heading");
+    append_text(elem, text);
     return elem;
 }
 
 Rml::Element* Pane::add_text(const Rml::String& text) {
     auto* elem = append(mRoot, "div");
-    append_text(elem, translate_text(text));
+    append_text(elem, text);
     return elem;
 }
 
@@ -194,22 +186,8 @@ Rml::Element* Pane::add_rml(const Rml::String& rml) {
     return elem;
 }
 
-void Pane::finalize() {
-    if (finalized) {
-        return;
-    }
-    finalized = true;
-
-    // Append spacer element to the bottom. RmlUi does not properly handle
-    // padding-bottom or margin-bottom on a scrollable flex container, so
-    // we need to create a fake spacer with an actual layout height to get
-    // padding at the bottom of a scrollable container.
-    append(mRoot, "spacer");
-}
-
 void Pane::clear() {
     clear_children();
-    finalized = false;
 }
 
 }  // namespace dusk::ui

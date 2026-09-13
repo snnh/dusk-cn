@@ -14,9 +14,12 @@
 #include <cstdio>
 #include <cstring>
 
-#include "helpers/string.hpp"
 #include "dusk/name_compat.hpp"
+
+#if TARGET_PC
 #include "dusk/version.hpp"
+#include "helpers/string.hpp"
+#endif
 
 dFile_info_c::dFile_info_c(JKRArchive* i_archive, u8 param_1) {
     mArchive = i_archive;
