@@ -6,6 +6,12 @@ Dusklight 是对《塞尔达传说：黄昏公主》的逆向工程重实现，�
 
 本仓库（[snnh/dusk](https://github.com/snnh/dusk)）在 [TwilitRealm/dusklight](https://github.com/TwilitRealm/dusklight) 基础上增加了以下增强功能。当前分支 `cn-enhancements` 不只包含 i18n 改动，也包含中文输入、便携模式、TPHD 资源适配和面向中文发行包的构建修复。欢迎star本项目
 
+## 赞助
+
+如果它对你有帮助，欢迎通过赞助支持持续开发。
+
+<img src="https://raw.githubusercontent.com/snnh/openwebcode/refs/heads/main/assets/donate-wechat.png" alt="微信赞赏码" width="240">
+
 ### 🌐 国际化与中文本地化
 
 | 改进 | 说明 |
