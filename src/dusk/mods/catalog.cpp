@@ -392,13 +392,13 @@ std::string api_error(const borealis::http::Response& response) {
         const auto& error = required_field(body, "error");
         return required_string(error, "message");
     } catch (...) {
-        return fmt::format("The catalog returned HTTP {}.", response.statusCode);
+        return fmt::format("[THE_CATALOG_RETURNED_HTTP] {}.", response.statusCode);
     }
 }
 
 FetchResult finish_request(borealis::http::Result result) {
     if (result.error != borealis::http::Error::None) {
-        return {.error = result.message.empty() ? "The catalog request failed." :
+        return {.error = result.message.empty() ? "[THE_CATALOG_REQUEST_FAILED]" :
                                                   std::move(result.message)};
     }
     if (result.response.statusCode != 200) {
@@ -407,16 +407,16 @@ FetchResult finish_request(borealis::http::Result result) {
     try {
         return {.page = parse_page(result.response.body)};
     } catch (const std::exception& exception) {
-        return {.error = fmt::format("The catalog response was invalid: {}", exception.what())};
+        return {.error = fmt::format("[THE_CATALOG_RESPONSE_WAS_INVALID]: {}", exception.what())};
     } catch (...) {
-        return {.error = "The catalog response was invalid."};
+        return {.error = "[THE_CATALOG_RESPONSE_WAS_INVALID]."};
     }
 }
 
 DetailFetchResult finish_detail_request(borealis::http::Result result) {
     if (result.error != borealis::http::Error::None) {
-        return {.error =
-                    result.message.empty() ? "The mod request failed." : std::move(result.message)};
+        return {.error = result.message.empty() ? "[THE_MOD_REQUEST_FAILED]" :
+                                                  std::move(result.message)};
     }
     if (result.response.statusCode != 200) {
         return {.error = api_error(result.response)};
@@ -424,9 +424,9 @@ DetailFetchResult finish_detail_request(borealis::http::Result result) {
     try {
         return {.detail = parse_detail(result.response.body)};
     } catch (const std::exception& exception) {
-        return {.error = fmt::format("The mod response was invalid: {}", exception.what())};
+        return {.error = fmt::format("[THE_MOD_RESPONSE_WAS_INVALID]: {}", exception.what())};
     } catch (...) {
-        return {.error = "The mod response was invalid."};
+        return {.error = "[THE_MOD_RESPONSE_WAS_INVALID]."};
     }
 }
 
@@ -522,7 +522,7 @@ borealis::Task<UpdateFetchResult> fetch_updates(
             if (result.error != borealis::http::Error::None) {
                 return {
                     .error =
-                        result.message.empty() ? "Could not check mod updates." : result.message,
+                        result.message.empty() ? "[COULD_NOT_CHECK_MOD_UPDATES]" : result.message,
                     .retryable = result.error == borealis::http::Error::Network ||
                                  result.error == borealis::http::Error::Timeout,
                 };
@@ -616,7 +616,7 @@ borealis::Task<UpdateFetchResult> fetch_updates(
                 }
                 return {.updates = std::move(updates)};
             } catch (const std::exception& error) {
-                return {.error = fmt::format("Invalid mod update response: {}", error.what())};
+                return {.error = fmt::format("[INVALID_MOD_UPDATE_RESPONSE] {}", error.what())};
             }
         });
 }

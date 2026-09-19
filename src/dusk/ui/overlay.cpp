@@ -484,9 +484,9 @@ void Overlay::update_pipeline_progress() {
 
     if (queuedPipelines != mLastQueuedPipelines) {
         mLastQueuedPipelines = queuedPipelines;
-        const auto noun = queuedPipelines == 1 ? "pipeline" : "pipelines";
+        const auto noun = queuedPipelines == 1 ? "[PIPELINE]" : "[PIPELINES]";
         set_text_content(
-            mPipelineProgressLabel, fmt::format("Building {} {}", queuedPipelines, noun));
+            mPipelineProgressLabel, fmt::format("[BUILDING] {} {}", queuedPipelines, noun));
     }
     mPipelineProgressBar->SetAttribute("value", progress);
 

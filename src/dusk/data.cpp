@@ -1,6 +1,7 @@
 #include "data.hpp"
 
 #include "dusk/app_info.hpp"
+#include "dusk/ui/i18n.hpp"
 
 #include <borealis/io.hpp>
 #include <borealis/log.hpp>
@@ -21,40 +22,40 @@ std::string status_message(const borealis::data::Status& status) {
     case None:
         return {};
     case NotInitialized:
-        message = "Data folders have not been initialized.";
+        message = "[DATA_FOLDERS_HAVE_NOT_BEEN_INITIALIZED]";
         break;
     case PreferencePathUnavailable:
-        message = "The system data folder is unavailable.";
+        message = "[THE_SYSTEM_DATA_FOLDER_IS_UNAVAILABLE]";
         break;
     case EmptyPath:
-        message = "Choose a folder.";
+        message = "[CHOOSE_A_FOLDER]";
         break;
     case CreateDirectoryFailed:
-        message = "The selected folder could not be created.";
+        message = "[THE_SELECTED_FOLDER_COULD_NOT_BE_CREATED]";
         break;
     case NotDirectory:
-        message = "The selected path is not a folder.";
+        message = "[THE_SELECTED_PATH_IS_NOT_A_FOLDER]";
         break;
     case WriteProbeFailed:
-        message = "The selected folder is not writable.";
+        message = "[THE_SELECTED_FOLDER_IS_NOT_WRITABLE]";
         break;
     case WriteProbeCleanupFailed:
-        message = "The selected folder could not be validated.";
+        message = "[THE_SELECTED_FOLDER_COULD_NOT_BE_VALIDATED]";
         break;
     case DescriptorWriteFailed:
-        message = "Dusklight could not save the data folder setting.";
+        message = "[DUSKLIGHT_COULD_NOT_SAVE_THE_DATA_FOLDER_SETTING]";
         break;
     case MigrationIncomplete:
-        message = "Data migration could not be completed.";
+        message = "[DATA_MIGRATION_COULD_NOT_BE_COMPLETED]";
         break;
     case OverrideActive:
-        message = "The data folder is fixed by --user-dir for this session.";
+        message = "[THE_DATA_FOLDER_IS_FIXED_BY_USER_DIR_FOR_THIS_SESSION]";
         break;
     case Unsupported:
-        message = "Changing the data folder is not supported on this platform.";
+        message = "[CHANGING_THE_DATA_FOLDER_IS_NOT_SUPPORTED_ON_THIS_PLATFORM]";
         break;
     case OpenFolderFailed:
-        message = "The data folder could not be opened.";
+        message = "[THE_DATA_FOLDER_COULD_NOT_BE_OPENED]";
         break;
     }
 
@@ -75,7 +76,7 @@ bool operation_succeeded(const borealis::data::Status& status, std::string* erro
     if (errorOut != nullptr) {
         *errorOut = message;
     }
-    Log.warn("{}", message);
+    Log.warn("{}", ui::i18n::tr(message));
     return false;
 }
 
@@ -130,10 +131,11 @@ borealis::data::Manager& manager() {
 Paths initialize_data(const std::filesystem::path& userDirectoryOverride) {
     const auto status = manager().initialize(userDirectoryOverride);
     if (!status && status.code != borealis::data::ErrorCode::MigrationIncomplete) {
-        Log.fatal("Failed to initialize data folders: {}", status_message(status));
+        Log.fatal("Failed to initialize data folders: {}", ui::i18n::tr(status_message(status)));
     }
     if (!status) {
-        Log.warn("{} Migration will be retried on the next launch.", status_message(status));
+        Log.warn("{} Migration will be retried on the next launch.",
+            ui::i18n::tr(status_message(status)));
     }
     return manager().paths();
 }
@@ -175,7 +177,7 @@ bool set_custom_data_path(const std::filesystem::path& path, std::string* errorO
 bool set_custom_data_path(const char* path, std::string* errorOut) {
     if (path == nullptr) {
         if (errorOut != nullptr) {
-            *errorOut = "Choose a folder.";
+            *errorOut = "[CHOOSE_A_FOLDER]";
         }
         return false;
     }

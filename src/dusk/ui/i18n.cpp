@@ -324,4 +324,10 @@ int translate(Rml::String& translated, const Rml::String& input) {
     return replacements;
 }
 
+std::string tr(std::string_view input) {
+    Rml::String translated;
+    translate(translated, Rml::String(input));
+    return translated;
+}
+
 }  // namespace dusk::ui::i18n

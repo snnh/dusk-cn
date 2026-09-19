@@ -98,7 +98,7 @@ std::string sha256_file(
     const std::filesystem::path& path, borealis::TaskContext& context, std::string& error) {
     std::ifstream input{path, std::ios::binary};
     if (!input) {
-        error = "Could not open the downloaded package";
+        error = "[COULD_NOT_OPEN_THE_DOWNLOADED_PACKAGE]";
         return {};
     }
 
@@ -107,7 +107,7 @@ std::string sha256_file(
     uint64_t completed = 0;
     while (input) {
         if (context.cancel_requested()) {
-            error = "Canceled";
+            error = "[CANCELED]";
             return {};
         }
         input.read(reinterpret_cast<char*>(buffer.data()), buffer.size());
@@ -119,7 +119,7 @@ std::string sha256_file(
         }
     }
     if (!input.eof()) {
-        error = "Could not read the downloaded package";
+        error = "[COULD_NOT_READ_THE_DOWNLOADED_PACKAGE]";
         return {};
     }
 
@@ -137,21 +137,21 @@ bool copy_to_staging(const std::filesystem::path& source, const std::filesystem:
     std::error_code filesystemError;
     std::filesystem::create_directories(destination.parent_path(), filesystemError);
     if (filesystemError) {
-        error =
-            fmt::format("Could not create the staging directory: {}", filesystemError.message());
+        error = fmt::format(
+            "[COULD_NOT_CREATE_THE_STAGING_DIRECTORY] {}", filesystemError.message());
         return false;
     }
     std::ifstream input{source, std::ios::binary};
     std::ofstream output{destination, std::ios::binary | std::ios::trunc};
     if (!input || !output) {
-        error = "Could not stage the local package";
+        error = "[COULD_NOT_STAGE_THE_LOCAL_PACKAGE]";
         return false;
     }
     std::array<char, 64 * 1024> buffer{};
     uint64_t completed = 0;
     while (input) {
         if (context.cancel_requested()) {
-            error = "Canceled";
+            error = "[CANCELED]";
             output.close();
             std::filesystem::remove(destination, filesystemError);
             return false;
@@ -166,7 +166,7 @@ bool copy_to_staging(const std::filesystem::path& source, const std::filesystem:
     }
     output.close();
     if (!input.eof() || !output) {
-        error = "Could not copy the local package";
+        error = "[COULD_NOT_COPY_THE_LOCAL_PACKAGE]";
         std::filesystem::remove(destination, filesystemError);
         return false;
     }
@@ -179,10 +179,10 @@ VerifyResult verify_url_package(const std::filesystem::path& path, const Request
     std::error_code ec;
     const auto actualSize = std::filesystem::file_size(path, ec);
     if (ec) {
-        return {.error = fmt::format("Could not read the downloaded package: {}", ec.message())};
+        return {.error = fmt::format("[COULD_NOT_READ_THE_DOWNLOADED_PACKAGE]: {}", ec.message())};
     }
     if (actualSize != source.size) {
-        return {.error = "Package size mismatch"};
+        return {.error = "[PACKAGE_SIZE_MISMATCH]"};
     }
 
     std::string error;
@@ -194,18 +194,18 @@ VerifyResult verify_url_package(const std::filesystem::path& path, const Request
         return {.canceled = true};
     }
     if (actualHash != lowercase(source.sha256)) {
-        return {.error = "Package checksum mismatch"};
+        return {.error = "[PACKAGE_CHECKSUM_MISMATCH]"};
     }
 
     ModMetadata metadata;
     if (!inspect_mod_bundle(path, metadata, error)) {
-        return {.error = fmt::format("Invalid mod package: {}", error)};
+        return {.error = fmt::format("[INVALID_MOD_PACKAGE] {}", error)};
     }
     if (metadata.id != request.id) {
-        return {.error = "Package ID does not match the catalog entry"};
+        return {.error = "[PACKAGE_ID_DOES_NOT_MATCH_THE_CATALOG_ENTRY]"};
     }
     if (metadata.version != request.version) {
-        return {.error = "Package version does not match the catalog entry"};
+        return {.error = "[PACKAGE_VERSION_DOES_NOT_MATCH_THE_CATALOG_ENTRY]"};
     }
     if (context.cancel_requested()) {
         return {.canceled = true};
@@ -213,7 +213,8 @@ VerifyResult verify_url_package(const std::filesystem::path& path, const Request
     const auto stagedPath = staging_path(stagingDir, metadata.id, key);
     std::filesystem::create_directories(stagedPath.parent_path(), ec);
     if (ec) {
-        return {.error = fmt::format("Could not create the staging directory: {}", ec.message())};
+        return {.error =
+                    fmt::format("[COULD_NOT_CREATE_THE_STAGING_DIRECTORY] {}", ec.message())};
     }
     std::string replaceError;
     if (!borealis::io::atomic_replace(path, stagedPath, replaceError)) {
@@ -227,7 +228,7 @@ VerifyResult verify_local_package(const LocalFile& source, const std::filesystem
     std::error_code ec;
     const auto size = std::filesystem::file_size(source.path, ec);
     if (ec) {
-        return {.error = fmt::format("Could not read the local package: {}", ec.message())};
+        return {.error = fmt::format("[COULD_NOT_READ_THE_LOCAL_PACKAGE]: {}", ec.message())};
     }
     context.report_progress(0, size);
     const auto stagedPath = stagingDir / fmt::format("{}.dusk.part", key);
@@ -239,7 +240,7 @@ VerifyResult verify_local_package(const LocalFile& source, const std::filesystem
     ModMetadata metadata;
     if (!inspect_mod_bundle(stagedPath, metadata, error)) {
         std::filesystem::remove(stagedPath, ec);
-        return {.error = fmt::format("Invalid mod package: {}", error)};
+        return {.error = fmt::format("[INVALID_MOD_PACKAGE] {}", error)};
     }
     return {.metadata = std::move(metadata), .stagedPath = stagedPath};
 }
@@ -265,7 +266,7 @@ void fail(QueueItem& item, std::string message, bool discardPartial) {
         item.completed = 0;
     }
     const char* title =
-        local_source(item) != nullptr ? "Mod package failed" : "Mod download failed";
+        local_source(item) != nullptr ? "[MOD_PACKAGE_FAILED]" : "[MOD_DOWNLOAD_FAILED]";
     ui::push_toast({
         .type = "warning",
         .title = title,
@@ -303,12 +304,12 @@ void start_download(QueueItem& item) {
     }
     const auto* source = url_source(item);
     if (source == nullptr) {
-        fail(item, "The install source is not a URL", false);
+        fail(item, "[THE_INSTALL_SOURCE_IS_NOT_A_URL]", false);
         return;
     }
     const auto userDir = ModLoader::instance().user_mods_dir();
     if (userDir.empty()) {
-        fail(item, "No writable mods directory is configured", false);
+        fail(item, "[NO_WRITABLE_MODS_DIRECTORY_IS_CONFIGURED]", false);
         return;
     }
 
@@ -317,7 +318,8 @@ void start_download(QueueItem& item) {
     std::error_code ec;
     std::filesystem::create_directories(item.partialPath.parent_path(), ec);
     if (ec) {
-        fail(item, fmt::format("Could not create the download directory: {}", ec.message()), false);
+        fail(item, fmt::format("[COULD_NOT_CREATE_THE_DOWNLOAD_DIRECTORY] {}", ec.message()),
+            false);
         return;
     }
 
@@ -337,12 +339,12 @@ void start_download(QueueItem& item) {
 void start_local_verification(QueueItem& item) {
     const auto* source = local_source(item);
     if (source == nullptr) {
-        fail(item, "The install source is not a local file", false);
+        fail(item, "[THE_INSTALL_SOURCE_IS_NOT_A_LOCAL_FILE]", false);
         return;
     }
     const auto userDir = ModLoader::instance().user_mods_dir();
     if (userDir.empty()) {
-        fail(item, "No writable mods directory is configured", false);
+        fail(item, "[NO_WRITABLE_MODS_DIRECTORY_IS_CONFIGURED]", false);
         return;
     }
     item.state = State::Verifying;
@@ -371,7 +373,7 @@ void finish_download(QueueItem& item) {
         taskError = exception.what();
         taskFailed = true;
     } catch (...) {
-        taskError = "The download failed";
+        taskError = "[THE_DOWNLOAD_FAILED]";
         taskFailed = true;
     }
     if (!completed && !taskFailed) {
@@ -401,9 +403,9 @@ void finish_download(QueueItem& item) {
     {
         const auto message = !completed->message.empty() ? completed->message :
                              completed->response.statusCode != 0 ?
-                                                           fmt::format("Server returned HTTP {}",
+                                                           fmt::format("[SERVER_RETURNED_HTTP] {}",
                                                                completed->response.statusCode) :
-                                                           "The download failed";
+                                                           "[THE_DOWNLOAD_FAILED]";
         if (retryable(*completed)) {
             schedule_retry(item, message);
         } else {
@@ -414,7 +416,7 @@ void finish_download(QueueItem& item) {
 
     const auto* source = url_source(item);
     if (source == nullptr) {
-        fail(item, "The install source changed", true);
+        fail(item, "[THE_INSTALL_SOURCE_CHANGED]", true);
         return;
     }
     item.completed = source->size;
@@ -439,7 +441,7 @@ void finish_verification(QueueItem& item) {
     } catch (const std::exception& exception) {
         result.error = exception.what();
     } catch (...) {
-        result.error = "Package verification failed";
+        result.error = "[PACKAGE_VERIFICATION_FAILED]";
     }
     item.verification = {};
     if (result.canceled || item.pendingIntent == PendingIntent::Cancel) {
@@ -462,13 +464,13 @@ void finish_verification(QueueItem& item) {
     if (const auto duplicate = find_queue_item_by_mod_id(result.metadata.id);
         duplicate != nullptr && duplicate != &item && !is_terminal(duplicate->state))
     {
-        fail(item, "This mod already has an active install", true);
+        fail(item, "[THIS_MOD_ALREADY_HAS_AN_ACTIVE_INSTALL]", true);
         return;
     }
     if (local_source(item) != nullptr && !item.request.id.empty() &&
         (item.request.id != result.metadata.id || item.request.version != result.metadata.version))
     {
-        fail(item, "The local package changed after confirmation", true);
+        fail(item, "[THE_LOCAL_PACKAGE_CHANGED_AFTER_CONFIRMATION]", true);
         return;
     }
     if (item.request.update) {
@@ -737,13 +739,13 @@ void cancel(std::string_view id) {
     }
     if (item->task) {
         item->pendingIntent = PendingIntent::Cancel;
-        item->message = "Canceling...";
+        item->message = "[CANCELING]";
         item->task.cancel();
         return;
     }
     if (item->verification) {
         item->pendingIntent = PendingIntent::Cancel;
-        item->message = "Canceling...";
+        item->message = "[CANCELING]";
         item->verification.cancel();
         return;
     }

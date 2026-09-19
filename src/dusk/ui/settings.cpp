@@ -166,10 +166,10 @@ constexpr std::array kAudioOutputModeNames = {
 };
 
 constexpr std::array kLetterboxModes = {
-    "Off",
-    "On",
-    "Only During Gameplay",
-    "Only During Cutscenes",
+    "[OFF]",
+    "[ON]",
+    "[ONLY_DURING_GAMEPLAY]",
+    "[ONLY_DURING_CUTSCENES]",
 };
 
 constexpr std::array kTouchTargetingLabels = {
@@ -185,8 +185,8 @@ constexpr std::array kTouchTargetingDescriptions = {
 };
 
 constexpr std::array kGyroInputModeLabels = {
-    "Sensor",
-    "Mouse",
+    "[SENSOR]",
+    "[MOUSE]",
 };
 
 constexpr std::array kMenuScalingModeLabels = {
@@ -196,9 +196,9 @@ constexpr std::array kMenuScalingModeLabels = {
 };
 
 constexpr std::array kAlwaysGreatspinModes = {
-    "Off",
-    "After Learning Skill",
-    "Always",
+    "[OFF]",
+    "[AFTER_LEARNING_SKILL]",
+    "[ALWAYS]",
 };
 
 constexpr std::array kMagicArmorModes = {
@@ -253,23 +253,23 @@ bool try_parse_backend(std::string_view backend, AuroraBackend& outBackend) {
 std::string_view backend_name(AuroraBackend backend) {
     switch (backend) {
     default:
-        return "Auto";
+        return "[AUTO]";
     case BACKEND_D3D12:
-        return "D3D12";
+        return "[D3D12]";
     case BACKEND_D3D11:
-        return "D3D11";
+        return "[D3D11]";
     case BACKEND_METAL:
-        return "Metal";
+        return "[METAL]";
     case BACKEND_VULKAN:
-        return "Vulkan";
+        return "[VULKAN]";
     case BACKEND_OPENGL:
-        return "OpenGL";
+        return "[OPENGL]";
     case BACKEND_OPENGLES:
-        return "OpenGL ES";
+        return "[OPENGL_ES]";
     case BACKEND_WEBGPU:
-        return "WebGPU";
+        return "[WEBGPU]";
     case BACKEND_NULL:
-        return "Null";
+        return "[NULL]";
     }
 }
 
@@ -334,7 +334,7 @@ Rml::String graphics_backend_display_name() {
 Rml::String configured_data_path_display_name() {
     const auto path = data::abbreviated_path_string(data::configured_data_path());
     if (path.empty()) {
-        return "(none)";
+        return "[NONE_PARENTHESIZED]";
     }
 
     auto display = borealis::io::display_name(path);
@@ -394,7 +394,7 @@ void data_folder_dialog_callback(borealis::file_select::Result result) {
         return;
     }
     if (result.status != borealis::file_select::Status::Selected || result.locations.empty()) {
-        show_data_folder_error_modal("Dusklight could not open the folder picker.");
+        show_data_folder_error_modal("[DUSKLIGHT_COULD_NOT_OPEN_THE_FOLDER_PICKER]");
         return;
     }
 
@@ -406,7 +406,7 @@ void data_folder_dialog_callback(borealis::file_select::Result result) {
 
     if (dataPathError.empty()) {
         dataPathError =
-            fmt::format("{} could not use the selected folder as its data folder.", AppName);
+            fmt::format("{} [COULD_NOT_USE_THE_SELECTED_FOLDER_AS_ITS_DATA_FOLDER]", AppName);
     }
     show_data_folder_error_modal(dataPathError);
 }
@@ -586,7 +586,7 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
                                 const auto& path = prelaunch_state().configuredDiscPath;
                                 std::string display;
                                 if (path.empty()) {
-                                    display = "(none)";
+                                    display = "[NONE_PARENTHESIZED]";
                                 } else {
                                     display = borealis::io::display_name(path);
                                     if (display.empty()) {
@@ -615,7 +615,7 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
                                 const auto& path = prelaunch_state().configuredHdContentPath;
                                 std::string display;
                                 if (path.empty()) {
-                                    display = "(none)";
+                                    display = "[NONE_PARENTHESIZED]";
                                 } else {
                                     display = std::filesystem::path(path).string();
                                     if (display.empty()) {
@@ -1047,7 +1047,7 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
             });
         leftPane.register_control(
             leftPane.add_select_button({
-                .key = "Disable Letterboxing",
+                .key = "[DISABLE_LETTERBOXING]",
                 .getValue =
                     [] {
                         return kLetterboxModes[static_cast<u8>(getSettings().game.disableLetterboxing.getValue())];
@@ -1074,8 +1074,8 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
                         });
                 }
                 pane.add_rml(
-                    "<br/>Disable the top and bottom black bars during L-targeting, aiming, "
-                    "cutscenes, dialogue, etc.");
+                    "<br/>[DISABLE_THE_TOP_AND_BOTTOM_BLACK_BARS_DURING_L_TARGETING_AIMING_CUTSCE]"
+                );
             });
     });
 
@@ -1308,7 +1308,7 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
             });
         leftPane.register_control(
             leftPane.add_child<NumberButton>(NumberButton::Props{
-                .key = "Main Music Volume",
+                .key = "[MAIN_MUSIC_VOLUME]",
                 .getValue = [] { return getSettings().audio.mainMusicVolume.getValue(); },
                 .setValue =
                     [](int value) {
@@ -1325,7 +1325,7 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
             }),
             rightPane, [](Pane& pane) {
                 pane.clear();
-                pane.add_text("Adjusts the volume of all music in the game.");
+                pane.add_text("[ADJUSTS_THE_VOLUME_OF_ALL_MUSIC_IN_THE_GAME]");
             });
 
         leftPane.add_section("[EFFECTS]");

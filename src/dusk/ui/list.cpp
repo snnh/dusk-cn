@@ -30,7 +30,7 @@ List::List(Rml::Element* parent, Props props)
     mViewport = append_element(mRoot, "ui-list-viewport");
     mContent = append_element(mViewport, "ui-list-content");
     mEmpty = append_element(mRoot, "ui-list-empty");
-    append_text(mEmpty, "No items");
+    append_text(mEmpty, "[NO_ITEMS]");
 
     Component::listen(mViewport, Rml::EventId::Scroll, [this](Rml::Event&) { mCullDirty = true; });
     listen(Rml::EventId::Keydown, [this](Rml::Event& event) { handle_keydown(event); });

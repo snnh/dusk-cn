@@ -63,9 +63,9 @@ Rml::String touch_controls_editor_document_source() {
         <resize-handle id="editor-handle-bottom-right" class="corner bottom right" />
     </selection-frame>
     <editor-toolbar id="editor-toolbar">
-        <button id="editor-save" class="editor-command primary"><span>Save</span></button>
-        <button id="editor-reset" class="editor-command"><span>Reset</span></button>
-        <button id="editor-cancel" class="editor-command"><span>Cancel</span></button>
+        <button id="editor-save" class="editor-command primary"><span>[SAVE]</span></button>
+        <button id="editor-reset" class="editor-command"><span>[RESET]</span></button>
+        <button id="editor-cancel" class="editor-command"><span>[CANCEL]</span></button>
     </editor-toolbar>
 </body>
 </rml>
@@ -594,9 +594,9 @@ void TouchControlsEditor::save_layout() {
 void TouchControlsEditor::request_reset() {
     auto dismiss = [](Modal& modal) { modal.pop(); };
     push(std::make_unique<Modal>(Modal::Props{
-        .title = "Reset Touch Layout?",
+        .title = "[RESET_TOUCH_LAYOUT]",
         .bodyText =
-            "Reset controls to their default layout. This will not be saved until you press Save.",
+            "[RESET_CONTROLS_TO_THEIR_DEFAULT_LAYOUT_THIS_WILL_NOT_BE_SAVED_UNTIL_YO]",
         .actions =
             {
                 ModalAction{

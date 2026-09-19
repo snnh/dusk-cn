@@ -43,25 +43,25 @@ std::string state_label(const mods::queue::Item& item) {
     using enum mods::queue::State;
     switch (item.state) {
     case Queued:
-        return "Queued";
+        return "[QUEUED]";
     case Downloading:
-        return "Downloading";
+        return "[DOWNLOADING]";
     case Paused:
-        return "Paused";
+        return "[PAUSED]";
     case Retrying:
-        return fmt::format("Retrying in {}s", item.retrySeconds);
+        return fmt::format("[RETRYING_IN] {}s", item.retrySeconds);
     case Verifying:
-        return "Verifying";
+        return "[VERIFYING]";
     case Handoff:
-        return "Installing";
+        return "[INSTALLING]";
     case Installed:
-        return "Installed";
+        return "[INSTALLED]";
     case InstallFailed:
-        return "Failed";
+        return "[MOD_STATUS_FAILED]";
     case Failed:
-        return "Failed";
+        return "[MOD_STATUS_FAILED]";
     case Canceled:
-        return "Canceled";
+        return "[CANCELED]";
     }
     return {};
 }

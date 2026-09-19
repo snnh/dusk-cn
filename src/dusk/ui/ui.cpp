@@ -662,9 +662,16 @@ void set_text_content(Rml::Element* parent, const Rml::String& text) noexcept {
     }
     if (!text.empty() && parent->GetNumChildren() == 1) {
         if (auto* element = dynamic_cast<Rml::ElementText*>(parent->GetFirstChild())) {
-            // RmlUi only dirties layout when the node's text changes.
-            element->SetText(text);
-            return;
+            // Reusing the text node skips the markup path that would otherwise run the
+            // translate callback, so translate here like append_text() does. Text whose
+            // translation carries markup falls through so it can be instanced as RML.
+            Rml::String translated;
+            i18n::translate(translated, text);
+            if (translated.find('<') == Rml::String::npos) {
+                // RmlUi only dirties layout when the node's text changes.
+                element->SetText(translated);
+                return;
+            }
         }
     }
     clear_children(parent);

@@ -1,5 +1,7 @@
 #include "icon_button.hpp"
 
+#include "i18n.hpp"
+
 #include <utility>
 
 namespace dusk::ui {
@@ -80,7 +82,7 @@ void IconButton::set_label(const Rml::String& label) {
     if (mLabel == label) {
         return;
     }
-    mRoot->SetAttribute("aria-label", label);
+    mRoot->SetAttribute("aria-label", i18n::tr(label));
     mLabel = label;
     if (mTooltipText.empty()) {
         Component::set_tooltip(label);

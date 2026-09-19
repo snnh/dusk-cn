@@ -68,17 +68,17 @@ const std::vector<ButtonNames> kGamepadButtonNames = {
         {SDL_GAMEPAD_TYPE_PS3, "L3"},
         {SDL_GAMEPAD_TYPE_PS4, "L3"},
         {SDL_GAMEPAD_TYPE_PS5, "L3"},
-        {SDL_GAMEPAD_TYPE_XBOX360, "Left Stick"},
-        {SDL_GAMEPAD_TYPE_XBOXONE, "Left Stick"},
-        {SDL_GAMEPAD_TYPE_GAMECUBE, "Control Stick"},
+        {SDL_GAMEPAD_TYPE_XBOX360, "[LEFT_STICK]"},
+        {SDL_GAMEPAD_TYPE_XBOXONE, "[LEFT_STICK]"},
+        {SDL_GAMEPAD_TYPE_GAMECUBE, "[CONTROL_STICK]"},
     }},
     { SDL_GAMEPAD_BUTTON_RIGHT_STICK, {
         {SDL_GAMEPAD_TYPE_PS3, "R3"},
         {SDL_GAMEPAD_TYPE_PS4, "R3"},
         {SDL_GAMEPAD_TYPE_PS5, "R3"},
-        {SDL_GAMEPAD_TYPE_XBOX360, "Right Stick"},
-        {SDL_GAMEPAD_TYPE_XBOXONE, "Right Stick"},
-        {SDL_GAMEPAD_TYPE_GAMECUBE, "C Stick"},
+        {SDL_GAMEPAD_TYPE_XBOX360, "[RIGHT_STICK]"},
+        {SDL_GAMEPAD_TYPE_XBOXONE, "[RIGHT_STICK]"},
+        {SDL_GAMEPAD_TYPE_GAMECUBE, "[C_STICK]"},
     }},
     { SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, {
         {SDL_GAMEPAD_TYPE_PS3, "L1"},
@@ -869,7 +869,7 @@ void ControllerConfigWindow::render_page(Pane& pane, int port, Page page) {
     case Page::Rumble: {
         if (PADCanForceDeviceRumble(static_cast<u32>(port))) {
             pane.add_child<BoolButton>(BoolButton::Props{
-                .key = "Use Device Haptics",
+                .key = "[USE_DEVICE_HAPTICS]",
                 .getValue = [port] { return PADGetForceDeviceRumble(static_cast<u32>(port)); },
                 .setValue =
                     [port](bool value) {
@@ -878,8 +878,8 @@ void ControllerConfigWindow::render_page(Pane& pane, int port, Page page) {
                     },
                 .isDisabled = [this] { return mRumbleTestActive; },
             });
-            pane.add_text("Use native device haptics instead of controller rumble. "
-                          "Useful for devices with built-in gamepads.");
+            pane.add_text(
+                "[USE_NATIVE_DEVICE_HAPTICS_INSTEAD_OF_CONTROLLER_RUMBLE_USEFUL_FOR_DEVI]");
         }
         auto& rumbleTest = pane.add_select_button({
             .key = "[TEST_RUMBLE]",
@@ -1280,13 +1280,13 @@ Rml::String native_button_name(SDL_Gamepad* gamepad, u32 buttonUntyped) {
 
     switch (button) {
     case SDL_GAMEPAD_BUTTON_DPAD_LEFT:
-        return "D-pad left";
+        return "[D_PAD_LEFT]";
     case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
-        return "D-pad right";
+        return "[D_PAD_RIGHT]";
     case SDL_GAMEPAD_BUTTON_DPAD_UP:
-        return "D-pad up";
+        return "[D_PAD_UP]";
     case SDL_GAMEPAD_BUTTON_DPAD_DOWN:
-        return "D-pad down";
+        return "[D_PAD_DOWN]";
     default:
         break;
     }

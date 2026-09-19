@@ -5,6 +5,7 @@
 #include "dusk/mods/queue.hpp"
 #include "dusk/mods/svc/registry.hpp"
 #include "dusk/settings.h"
+#include "dusk/ui/i18n.hpp"
 
 #include <borealis/log.hpp>
 #include <borealis/update.hpp>
@@ -80,12 +81,12 @@ void refresh_entries() {
         }
         const auto* local = ModLoader::instance().find_mod(entry.result.id);
         if (local == nullptr || local->metadata.version != entry.result.installedVersion) {
-            reason = "The installed version changed.";
+            reason = "[THE_INSTALLED_VERSION_CHANGED]";
         } else if (!store.fresh) {
-            reason = "Check for updates again.";
+            reason = "[CHECK_FOR_UPDATES_AGAIN]";
         } else if (entry.result.target) {
             if (!ModLoader::instance().can_update(*local)) {
-                reason = "Development directories cannot be updated in-game.";
+                reason = "[DEVELOPMENT_DIRECTORIES_CANNOT_BE_UPDATED_IN_GAME]";
             } else {
                 reason = validate(store.environment, precondition(entry));
             }
@@ -127,7 +128,7 @@ void begin_check() {
     ++store.generation;
     if (store.environment.mods.size() > 512 || store.environment.services.size() > 4096) {
         store.state = State::Failed;
-        store.error = "The installed mod inventory exceeds the catalog limit.";
+        store.error = "[THE_INSTALLED_MOD_INVENTORY_EXCEEDS_THE_CATALOG_LIMIT]";
     } else if (store.targets.empty()) {
         store.entries.clear();
         store.state = State::Ready;
@@ -180,31 +181,31 @@ UpdateEnvironment capture_environment() {
 std::string validate(const UpdateEnvironment& environment, const UpdatePrecondition& update) {
     const auto mod = std::ranges::find(environment.mods, update.modId, &InstalledPackage::id);
     if (mod == environment.mods.end()) {
-        return "The mod is no longer installed.";
+        return "[THE_MOD_IS_NO_LONGER_INSTALLED]";
     }
     if (mod->version != update.installedVersion) {
-        return "The installed version changed. Check for updates again.";
+        return "[THE_INSTALLED_VERSION_CHANGED_CHECK_FOR_UPDATES_AGAIN]";
     }
     const auto installedVersion = borealis::update::parse_version(mod->version);
     const auto targetVersion = borealis::update::parse_version(update.targetVersion);
     if (!installedVersion || !targetVersion) {
-        return "The mod version cannot be compared.";
+        return "[THE_MOD_VERSION_CANNOT_BE_COMPARED]";
     }
     if (borealis::update::compare_version(*targetVersion, *installedVersion) <= 0) {
-        return "This version is already installed or older.";
+        return "[THIS_VERSION_IS_ALREADY_INSTALLED_OR_OLDER]";
     }
     const auto& candidate = update.compatibility;
     if (candidate.containsNativeCode) {
         if (!catalog::supports_native_installs()) {
-            return "Native mod updates are not supported on this device.";
+            return "[NATIVE_MOD_UPDATES_ARE_NOT_SUPPORTED_ON_THIS_DEVICE]";
         }
         if (environment.platform.empty() || std::ranges::find(candidate.platforms,
                                                 environment.platform) == candidate.platforms.end())
         {
-            return "This release does not support this device.";
+            return "[THIS_RELEASE_DOES_NOT_SUPPORT_THIS_DEVICE]";
         }
         if (candidate.abi != environment.abi) {
-            return "This release requires a different Dusklight ABI.";
+            return "[THIS_RELEASE_REQUIRES_A_DIFFERENT_DUSKLIGHT_ABI]";
         }
     }
 
@@ -218,8 +219,8 @@ std::string validate(const UpdateEnvironment& environment, const UpdatePrecondit
         for (auto service : candidate.exports) {
             service.providerId = update.modId;
             if (!services.emplace(service_key(service.id, service.major), service).second) {
-                return fmt::format(
-                    "Another provider already supplies {}@{}.", service.id, service.major);
+                return fmt::format("[ANOTHER_PROVIDER_ALREADY_SUPPLIES] {}@{}.", service.id,
+                    service.major);
             }
         }
     }
@@ -231,14 +232,14 @@ std::string validate(const UpdateEnvironment& environment, const UpdatePrecondit
         if (service.providerId == update.modId &&
             !available(service.id, service.major, service.minor))
         {
-            return fmt::format("This release removes or lowers {}@{}.{}.", service.id,
+            return fmt::format("[THIS_RELEASE_REMOVES_OR_LOWERS] {}@{}.{}.", service.id,
                 service.major, service.minor);
         }
     }
     for (const auto& required : candidate.imports) {
         if (!required.optional && !available(required.id, required.major, required.minMinor)) {
-            return fmt::format(
-                "Requires {}@{}.{} or newer.", required.id, required.major, required.minMinor);
+            return fmt::format("[REQUIRES] {}@{}.{} [OR_NEWER]", required.id, required.major,
+                required.minMinor);
         }
     }
 
@@ -269,7 +270,7 @@ std::string validate(const UpdateEnvironment& environment, const UpdatePrecondit
         return edges != graph.end() && std::ranges::any_of(edges->second, reaches_target);
     };
     if (std::ranges::any_of(graph[update.modId], reaches_target)) {
-        return "This release introduces a required dependency cycle.";
+        return "[THIS_RELEASE_INTRODUCES_A_REQUIRED_DEPENDENCY_CYCLE]";
     }
     return {};
 }
@@ -277,7 +278,7 @@ std::string validate(const UpdateEnvironment& environment, const UpdatePrecondit
 std::string validate(const UpdatePrecondition& value) {
     const auto* mod = ModLoader::instance().find_mod(value.modId);
     if (mod != nullptr && !ModLoader::instance().can_update(*mod)) {
-        return "Development directories cannot be updated in-game.";
+        return "[DEVELOPMENT_DIRECTORIES_CANNOT_BE_UPDATED_IN_GAME]";
     }
     return validate(capture_environment(), value);
 }
@@ -355,7 +356,7 @@ void update() {
             }
         } else {
             store.state = State::Failed;
-            store.error = result ? result->error : "The update check did not return a result.";
+            store.error = result ? result->error : "[THE_UPDATE_CHECK_DID_NOT_RETURN_A_RESULT]";
             if (result && result->retryable && store.retries < 3 &&
                 (store.automatic || store.tracking))
             {
@@ -363,7 +364,7 @@ void update() {
                 store.checkAt = Clock::now() + std::chrono::seconds{std::max(
                                                    result->retryAfter, 5 << store.retries++)};
             }
-            Log.warn("Mod update check failed: {}", store.error);
+            Log.warn("Mod update check failed: {}", ui::i18n::tr(store.error));
             ++store.generation;
         }
     }
@@ -421,46 +422,47 @@ uint64_t download_size() noexcept {
 
 std::string status_text() {
     if (!store.initialized) {
-        return "Waiting for mods to initialize.";
+        return "[WAITING_FOR_MODS_TO_INITIALIZE]";
     }
     if (store.state == State::Unavailable) {
-        return "Online mod updates are unavailable.";
+        return "[ONLINE_MOD_UPDATES_ARE_UNAVAILABLE]";
     }
     if (store.state == State::Checking) {
-        return "Checking for mod updates…";
+        return "[CHECKING_FOR_MOD_UPDATES]";
     }
     if (store.state == State::Idle) {
-        return store.requested ? "Checking for mod updates…" : "Automatic update checks are off.";
+        return store.requested ? "[CHECKING_FOR_MOD_UPDATES]" : "[AUTOMATIC_UPDATE_CHECKS_ARE_OFF]";
     }
     if (!store.error.empty()) {
-        return fmt::format("Could not check: {}", store.error);
+        return fmt::format("[COULD_NOT_CHECK] {}", store.error);
     }
     if (!store.fresh) {
-        return store.requested || store.task ? "Installed mods changed. Checking again…" :
-                                               "Installed mods changed. Check again.";
+        return store.requested || store.task ? "[INSTALLED_MODS_CHANGED_CHECKING_AGAIN]" :
+                                               "[INSTALLED_MODS_CHANGED_CHECK_AGAIN]";
     }
     if (const auto count = actionable_count()) {
-        return fmt::format("{} update{} available", count, count == 1 ? "" : "s");
+        return fmt::format("{} {}", count,
+            count == 1 ? "[MOD_UPDATE_AVAILABLE]" : "[MOD_UPDATES_AVAILABLE]");
     }
     if (std::ranges::any_of(
             store.entries, [](const Entry& entry) { return !entry.queueKey.empty(); }))
     {
-        return "No other updates available.";
+        return "[NO_OTHER_UPDATES_AVAILABLE]";
     }
     if (std::ranges::any_of(store.entries,
             [](const Entry& entry) {
                 return entry.result.target || !entry.result.blockers.empty();
             }))
     {
-        return "No updates ready to install.";
+        return "[NO_UPDATES_READY_TO_INSTALL]";
     }
-    return "Your mods are up to date.";
+    return "[YOUR_MODS_ARE_UP_TO_DATE]";
 }
 
 EnqueueResult enqueue_update(std::string_view id) {
     const auto* entry = find(id);
     if (!entry || !entry->result.target) {
-        return {.skipped = 1, .error = "Check for updates first."};
+        return {.skipped = 1, .error = "[CHECK_FOR_UPDATES_FIRST]"};
     }
     if (const auto existing = queue::find_by_mod_id(id);
         existing && !queue::is_terminal(existing->state))
@@ -468,7 +470,7 @@ EnqueueResult enqueue_update(std::string_view id) {
         return {.skipped = 1, .queueKey = existing->id};
     }
     if (!store.fresh) {
-        return {.skipped = 1, .error = "Check for updates again."};
+        return {.skipped = 1, .error = "[CHECK_FOR_UPDATES_AGAIN]"};
     }
     auto expected = precondition(*entry);
     if (auto error = validate(expected); !error.empty()) {
@@ -487,7 +489,7 @@ EnqueueResult enqueue_update(std::string_view id) {
             },
             &key))
     {
-        return {.skipped = 1, .error = "Could not enqueue this update."};
+        return {.skipped = 1, .error = "[COULD_NOT_ENQUEUE_THIS_UPDATE]"};
     }
     refresh_entries();
     return {.accepted = 1, .queueKey = std::move(key)};

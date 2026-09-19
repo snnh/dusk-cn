@@ -1,6 +1,7 @@
 #include "color_input.hpp"
 
 #include "button.hpp"
+#include "i18n.hpp"
 #include "input.hpp"
 #include "nav_group.hpp"
 
@@ -337,13 +338,13 @@ bool ColorInput::disabled() const {
 Rml::String ColorInput::format_value() {
     const Rml::String value = mProps.getValue ? mProps.getValue() : "";
     if (value == "rainbow") {
-        return "Rainbow";
+        return "[RAINBOW]";
     }
     const auto color = parse_color(value, mProps.alpha);
     if (color.has_value()) {
         return format_color(*color, mHexFormat, mProps.alpha);
     }
-    return value.empty() ? "Default" : value;
+    return value.empty() ? "[DEFAULT]" : value;
 }
 
 bool ColorInput::handle_nav_command(NavCommand cmd) {
@@ -445,7 +446,7 @@ void ColorInput::build_picker() {
                     .verticalBoundary = NavGroup::Boundary::Bubble,
                 });
     const auto formatLabel = [this] {
-        return mHexFormat ? "Hex" : (mProps.alpha ? "RGBA" : "RGB");
+        return mHexFormat ? "[HEX]" : (mProps.alpha ? "[RGBA]" : "[RGB]");
     };
     auto& formatButton = footerNavigation.add_item<Button>(formatLabel());
     formatButton.on_pressed([this, formatButtonPtr = &formatButton, formatLabel] {
@@ -454,17 +455,17 @@ void ColorInput::build_picker() {
         refresh_picker();
     });
 
-    footerNavigation.add_item<Button>("Default").on_pressed([this] { commit_value(""); });
+    footerNavigation.add_item<Button>("[DEFAULT]").on_pressed([this] { commit_value(""); });
 
     auto& valueButton = footerNavigation.add_item<Button>("", "color-value");
     mPickerValue = valueButton.root();
-    mPickerValue->SetAttribute("title", "Copy color");
+    mPickerValue->SetAttribute("title", i18n::tr("[COPY_COLOR]"));
     valueButton.on_pressed([this] {
         SDL_SetClipboardText(format_color(current_color(), mHexFormat, mProps.alpha).c_str());
         push_toast({
             .type = "info",
-            .title = "Color",
-            .content = "Copied to clipboard",
+            .title = "[COLOR]",
+            .content = "[COPIED_TO_CLIPBOARD]",
             .duration = std::chrono::seconds{2},
         });
     });
@@ -501,7 +502,7 @@ void ColorInput::build_picker() {
 }
 
 void ColorInput::add_presets(NavGroup& navigation) {
-    append_text(append(navigation.root(), "color-heading"), "Presets");
+    append_text(append(navigation.root(), "color-heading"), "[PRESETS]");
     auto* gridElement = append(navigation.root(), "color-presets");
     auto& grid = navigation.add_existing_item<NavGroup>(
         gridElement, NavGroup::Props{
@@ -529,7 +530,7 @@ void ColorInput::add_history(NavGroup& navigation) {
     if (compatibleHistory.empty()) {
         return;
     }
-    append_text(append(navigation.root(), "color-heading"), "Recent");
+    append_text(append(navigation.root(), "color-heading"), "[RECENT]");
     auto* gridElement = append(navigation.root(), "color-history");
     auto& grid = navigation.add_existing_item<NavGroup>(
         gridElement, NavGroup::Props{
@@ -549,7 +550,7 @@ void ColorInput::add_swatch_button(NavGroup& navigation, const Rml::String& valu
     ui::clear_children(button.root());
     auto* chip = append(button.root(), "color-swatch");
     apply_swatch(chip, value, mProps.alpha);
-    Rml::String title = value == "rainbow" ? "Rainbow" : value;
+    Rml::String title = value == "rainbow" ? i18n::tr("[RAINBOW]") : value;
     if (const auto color = parse_color(value, mProps.alpha)) {
         title = format_color(*color, true, mProps.alpha);
     }
