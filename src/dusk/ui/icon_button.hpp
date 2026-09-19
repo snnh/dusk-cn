@@ -19,10 +19,15 @@ public:
     };
 
     IconButton(Rml::Element* parent, Props props);
-    void update() override;
+    void set_icon(std::string_view icon);
+    void set_label(const Rml::String& label);
+    void set_tooltip(const Rml::String& text) override;
 
 private:
-    Tooltip mTooltip;
+    Rml::Element* mIcon;
+    Rml::String mIconName;
+    Rml::String mLabel;
+    Rml::String mTooltipText;
 };
 
 }  // namespace dusk::ui

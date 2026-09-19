@@ -32,6 +32,7 @@ private:
     void update_safe_area() noexcept;
 
     Rml::Element* mRoot;
+    Button* mModsButton = nullptr;
     std::unique_ptr<TabBar> mTabBar;
     std::unique_ptr<Button> mCloseButton;
     Insets mTabBarPadding;

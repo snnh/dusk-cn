@@ -26,7 +26,7 @@ public:
 
     bool focus() override;
 
-    void add_tab(const Rml::String& title, TabCallback callback);
+    Button& add_tab(const Rml::String& title, TabCallback callback);
     void clear_tabs();
     bool set_active_tab(int index);
     void refresh_active_tab();

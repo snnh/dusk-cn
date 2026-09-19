@@ -58,4 +58,12 @@ std::filesystem::path ModBundleDisk::toRealPath(const std::string& fileName) con
     return root_path / filePath;
 }
 
+bool ModBundleDisk::file_exists(const std::string& fileName) {
+    return std::filesystem::is_regular_file(toRealPath(fileName));
+}
+
+bool ModBundleDisk::directory_exists(const std::string& fileName) {
+    return std::filesystem::is_directory(toRealPath(fileName));
+}
+
 }  // namespace dusk::mods

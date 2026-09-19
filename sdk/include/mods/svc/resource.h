@@ -14,7 +14,7 @@
 
 #define RESOURCE_SERVICE_ID DUSKLIGHT_SERVICE_ID_PREFIX "resource"
 #define RESOURCE_SERVICE_MAJOR 1u
-#define RESOURCE_SERVICE_MINOR 0u
+#define RESOURCE_SERVICE_MINOR 1u
 
 /*
  * A loaded resource, allocated by the service. Return every successful load with free;
@@ -44,6 +44,9 @@ typedef struct ResourceService {
      * already-freed buffer.
      */
     void (*free)(ModContext* ctx, ResourceBuffer* buffer);
+
+    bool (*file_exists)(ModContext* ctx, char const* relative_path);
+    bool (*directory_exists)(ModContext* ctx, char const* relative_path);
 } ResourceService;
 
 MOD_DECLARE_SERVICE(ResourceService, svc_resource, RESOURCE_SERVICE_ID, RESOURCE_SERVICE_MAJOR,

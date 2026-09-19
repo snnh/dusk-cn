@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <unordered_map>
 
 namespace dusk::game_clock {
 
@@ -20,7 +19,6 @@ native_clock::time_point s_previousNativeSample{};
 game_clock::time_point s_latestGameSample{};
 game_clock::time_point s_currentSnapshotTime{};
 game_clock::time_point s_pendingSimTime{};
-std::unordered_map<uintptr_t, game_clock::time_point> s_intervalLastSample;
 uint64_t s_presentationEpoch = 1;
 bool s_timingModeInitialized = false;
 bool s_previousSeparatePresentation = false;
@@ -31,6 +29,15 @@ constexpr game_clock::duration kSimPeriodDuration =
     std::chrono::duration_cast<game_clock::duration>(std::chrono::duration<float>(kSimPeriod));
 constexpr native_clock::duration kAbnormalGapResetThreshold = std::chrono::milliseconds(250);
 constexpr int kMaxSimTicksPerFrame = static_cast<int>(aurora::time::kMaximumTimeScale) * 4;
+
+float ui_dt() {
+    if (s_simTickActive) {
+        return kSimPeriod;
+    }
+
+    const float maximumDt = kUiMaximumDt * aurora::time::scale();
+    return std::clamp(g_frameTiming.dt, 0.0f, maximumDt);
+}
 }  // namespace
 
 void initialize() {
@@ -147,6 +154,10 @@ bool is_sim_frame() {
     return !g_frameTiming.separatePresentation || s_simTickActive;
 }
 
+bool is_presentation_frame() {
+    return !g_frameTiming.separatePresentation || !s_simTickActive;
+}
+
 float sample_interpolation_step() {
     const float step =
         std::chrono::duration<float>(game_clock::now() - s_currentSnapshotTime).count() /
@@ -154,17 +165,19 @@ float sample_interpolation_step() {
     return std::clamp(step, 0.0f, 1.0f);
 }
 
-float consume_interval(const void* consumer) {
-    const auto key = reinterpret_cast<uintptr_t>(consumer);
+double sample_time() {
     const auto now = s_simTickActive ? s_pendingSimTime : game_clock::now();
-    const float timeScale = aurora::time::scale();
-    float dt = kUiInitialDt * timeScale;
-    if (const auto it = s_intervalLastSample.find(key); it != s_intervalLastSample.end()) {
-        dt = std::chrono::duration<float>(now - it->second).count();
-        const float maximumDt = std::max(kUiMaximumDt * timeScale, kSimPeriod);
-        dt = std::min(dt, maximumDt);
-    }
-    s_intervalLastSample[key] = now;
+    return std::chrono::duration<double>(now.time_since_epoch()).count();
+}
+
+float original_frames() {
+    return ui_dt() / kSimPeriod;
+}
+
+float consume_interval(double& lastSample) {
+    const double now = sample_time();
+    const float dt = std::max(0.0, now - lastSample);
+    lastSample = now;
     return dt;
 }
 

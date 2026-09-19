@@ -13,7 +13,7 @@
 #include "d/d_pane_class.h"
 
 #if TARGET_PC
-#include "dusk/interp/frame_interpolation.h"
+#include "dusk/interp/user_interface.h"
 #endif
 
 dMeterHaihai_c::dMeterHaihai_c(u8 i_type) {
@@ -59,12 +59,13 @@ int dMeterHaihai_c::_create() {
 
 int dMeterHaihai_c::_execute(u32 i_flags) {
     mFlags = i_flags;
-    updateHaihai();
+    DUSK_IF_ELSE(setScale(1.0f), updateHaihai());
     alphaAnimeHaihai(i_flags);
     return 1;
 }
 
 void dMeterHaihai_c::draw() {
+    IF_DUSK(updateHaihai());
     if ((mFlags & 8) || (mFlags & 0x10) || (mFlags & 0x1000000) || (mFlags & 0x800000) ||
         (mFlags & 0x20) || (mFlags & 0x4000000))
     {
@@ -132,6 +133,7 @@ void dMeterHaihai_c::draw() {
 }
 
 void dMeterHaihai_c::drawHaihai(u8 i_direction) {
+    IF_DUSK(updateHaihai());
     f32 center_x = FB_WIDTH_BASE / 2;
     f32 center_y = FB_HEIGHT_BASE / 2;
 
@@ -187,6 +189,7 @@ void dMeterHaihai_c::drawHaihai(u8 i_direction) {
 }
 
 void dMeterHaihai_c::drawHaihai(u8 i_direction, f32 i_posX, f32 i_posY, f32 param_3, f32 param_4) {
+    IF_DUSK(updateHaihai());
     if (mType == 1) {
         i_posX += (3.0f + g_drawHIO.mScrollArrowCenterPosX);
         i_posY += (g_drawHIO.mScrollArrowCenterPosY - 5.0f);
@@ -284,13 +287,21 @@ void dMeterHaihai_c::updateHaihai() {
     playBtkAnime(mpCursorBtk);
     playBpkAnime(mpCursorBpk);
     mpHaihaiScreen->animation();
-    setScale(1.0f);
+    IF_NOT_DUSK(setScale(1.0f));
 }
 
 void dMeterHaihai_c::playBckAnime(J2DAnmTransformKey* i_bck) {
     if (checkPlayAnime(1)) {
         if (i_bck != NULL) {
-            IF_DUSK_BLOCK(dusk::interp::get_ui_tick_pending())
+#if TARGET_PC
+            f32 speed;
+            if (mType == 4) {
+                speed = g_drawHIO.mWiiLockArrowBCKAnimSpeed;
+            } else {
+                speed = g_drawHIO.mScrollArrowBCKAnimSpeed;
+            }
+            dusk::vdt::present_looping(mBckFrame, i_bck, speed);
+#else
             if (mType == 4) {
                 mBckFrame += g_drawHIO.mWiiLockArrowBCKAnimSpeed;
             } else {
@@ -300,12 +311,12 @@ void dMeterHaihai_c::playBckAnime(J2DAnmTransformKey* i_bck) {
             if (mBckFrame >= i_bck->getFrameMax()) {
                 mBckFrame -= i_bck->getFrameMax();
             }
-            IF_DUSK_BLOCK_END
+#endif
         } else {
             mBtkFrame = 1.0f;
         }
 
-        i_bck->setFrame(mBckFrame);
+        IF_NOT_DUSK(i_bck->setFrame(mBckFrame));
         mpHaihaiScreen->search(MULTI_CHAR('n_anim'))->setAnimation(i_bck);
         mpHaihaiScreen->search(MULTI_CHAR('n_anim'))->animationTransform();
         mpHaihaiScreen->search(MULTI_CHAR('n_anim'))->setAnimation((J2DAnmTransform*)NULL);
@@ -315,7 +326,15 @@ void dMeterHaihai_c::playBckAnime(J2DAnmTransformKey* i_bck) {
 void dMeterHaihai_c::playBtkAnime(J2DAnmTextureSRTKey* i_btk) {
     if (checkPlayAnime(2)) {
         if (i_btk != NULL) {
-            IF_DUSK_BLOCK(dusk::interp::get_ui_tick_pending())
+#if TARGET_PC
+            f32 speed;
+            if (mType == 4) {
+                speed = g_drawHIO.mWiiLockArrowBTKAnimSpeed;
+            } else {
+                speed = g_drawHIO.mScrollArrowBTKAnimSpeed;
+            }
+            dusk::vdt::present_looping(mBtkFrame, i_btk, speed);
+#else
             if (mType == 4) {
                 mBtkFrame += g_drawHIO.mWiiLockArrowBTKAnimSpeed;
             } else {
@@ -325,12 +344,12 @@ void dMeterHaihai_c::playBtkAnime(J2DAnmTextureSRTKey* i_btk) {
             if (mBtkFrame >= i_btk->getFrameMax()) {
                 mBtkFrame -= i_btk->getFrameMax();
             }
-            IF_DUSK_BLOCK_END
+#endif
         } else {
             mBtkFrame = 1.0f;
         }
 
-        i_btk->setFrame(mBtkFrame);
+        IF_NOT_DUSK(i_btk->setFrame(mBtkFrame));
         mpHaihaiScreen->search(MULTI_CHAR('yaji00'))->setAnimation(i_btk);
         mpHaihaiScreen->search(MULTI_CHAR('yaji01'))->setAnimation(i_btk);
     }
@@ -339,7 +358,15 @@ void dMeterHaihai_c::playBtkAnime(J2DAnmTextureSRTKey* i_btk) {
 void dMeterHaihai_c::playBpkAnime(J2DAnmColor* i_bpk) {
     if (checkPlayAnime(0)) {
         if (i_bpk != NULL) {
-            IF_DUSK_BLOCK(dusk::interp::get_ui_tick_pending())
+#if TARGET_PC
+            f32 speed;
+            if (mType == 4) {
+                speed = g_drawHIO.mWiiLockArrowBPKAnimSpeed;
+            } else {
+                speed = g_drawHIO.mScrollArrowBPKAnimSpeed;
+            }
+            dusk::vdt::present_looping(mBpkFrame, i_bpk, speed);
+#else
             if (mType == 4) {
                 mBpkFrame += g_drawHIO.mWiiLockArrowBPKAnimSpeed;
             } else {
@@ -349,12 +376,12 @@ void dMeterHaihai_c::playBpkAnime(J2DAnmColor* i_bpk) {
             if (mBpkFrame >= i_bpk->getFrameMax()) {
                 mBpkFrame -= i_bpk->getFrameMax();
             }
-            IF_DUSK_BLOCK_END
+#endif
         } else {
             mBpkFrame = 1.0f;
         }
 
-        i_bpk->setFrame(mBpkFrame);
+        IF_NOT_DUSK(i_bpk->setFrame(mBpkFrame));
         mpHaihaiScreen->search(MULTI_CHAR('npc_l1'))->setAnimation(i_bpk);
         mpHaihaiScreen->search(MULTI_CHAR('yaji_l'))->setAnimation(i_bpk);
     }

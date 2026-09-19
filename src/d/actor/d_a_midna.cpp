@@ -499,7 +499,6 @@ int daMidna_c::createHeap() {
         }
     }
 
-    IF_DUSK(mBckHeap[0].reserveBuffer(0x1DC);)
     JKRReadIdxResource(mBckHeap[0].getBuffer(), mBckHeap[0].getBufferSize(), 0x1DC, dComIfGp_getAnmArchive());
     J3DAnmTransform* md_anm = (J3DAnmTransform*)J3DAnmLoaderDataBase::load(mBckHeap[0].getBuffer());
     modelData = (J3DModelData*)dComIfG_getObjectRes(l_arcName, 14);
@@ -513,7 +512,7 @@ int daMidna_c::createHeap() {
             if (name != NULL && strcmp(name, "midona_eye") == 0) {
                 ResTIMG* timg = tex->getResTIMG(i);
                 timg->mipmapEnabled = false;
-                tex->initGXTexObj(i);
+                tex->loadGXTexObj(i);
                 break;
             }
         }
@@ -2168,6 +2167,13 @@ void daMidna_c::setAnm() {
         }
 
         if (anm == ANM_S_APPEAR || anm == ANM_S_APPEARBL) {
+#if TARGET_PC
+            mpShadowModel->forgetMtx();
+            mpShadowMaskBmd->forgetMtx();
+            mpShadowHandsBmd->forgetMtx();
+            mpShadowHairhandBmd->forgetMtx();
+            mpGokouBmd->forgetMtx();
+#endif
             mSound.startCreatureSound(Z2SE_MIDNA_APPEAR, 0, -1);
         } else if (anm == ANM_S_RETURN || anm == ANM_RETURN) {
             mSound.startCreatureSound(Z2SE_MIDNA_DISAPPEAR, 0, -1);

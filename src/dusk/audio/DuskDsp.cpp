@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <complex>
 #include <span>
 #include <numbers>
 
@@ -54,8 +55,8 @@ f32 dusk::audio::HrtfGain = 0.5f;
 u8 dusk::audio::OutChannelCount = 0;
 
 // 3dB at 5kHz.
-static constexpr f32 HRTF_LP_K     = 0.75f;
-static constexpr f32 HRTF_ALLPASS_G = 0.3f;
+static constexpr f32 HRTF_LP_K      = (SampleRate == 48000) ? 0.6267f : 0.75f;
+static constexpr f32 HRTF_ALLPASS_G = (SampleRate == 48000) ? 0.448f : 0.3f;
 // Front never drops below (1 - HRTF_EXTRACT_MAX).
 static constexpr f32 HRTF_EXTRACT_MAX = 0.6f;
 
@@ -387,33 +388,94 @@ static void FillDecodeBuf(JASDsp::TChannel& channel, ChannelAuxData& aux, int ne
 }
 
 /**
+ * Adapts IIR biquad filter coeffs for fs = 32kHz -> 48kHz, Hz-preserving.
+ */
+static BiquadCoeffs RemapBiquad32to48(float b1, float b2, float a1, float a2) {
+    using cplx = std::complex<f64>;
+
+    constexpr auto kOldRate = 32000.0;
+    constexpr auto kNewRate = f64(SampleRate);
+    constexpr auto kGamma = kOldRate / kNewRate;
+
+    if (b1 == 0 && b2 == 0 && a1 == 0 && a2 == 0) {
+        return {0, 0, 0, 0};
+    }
+
+    auto mapPoint = [](cplx z) {
+        if (std::abs(z.imag()) < 1e-9 * std::max(std::abs(z.real()), 1.0)) {
+            f64 r = z.real();
+            f64 sign = (r >= 0.0) ? 1.0 : -1.0;
+            return cplx(sign * std::pow(std::abs(r), kGamma), 0.0);
+        }
+        f64 r = std::abs(z);
+        f64 theta = std::arg(z);
+        return std::polar(std::pow(r, kGamma), theta * kGamma);
+    };
+
+    f64 disc = f64(a1) * a1 + 4.0 * a2;
+    cplx p1, p2;
+    if (disc >= 0.0) {
+        f64 sq = std::sqrt(disc);
+        p1 = {(a1 + sq) * 0.5, 0.0};
+        p2 = {(a1 - sq) * 0.5, 0.0};
+    } else {
+        f64 sq = std::sqrt(-disc);
+        p1 = {a1 * 0.5,  sq * 0.5};
+        p2 = {a1 * 0.5, -sq * 0.5};
+    }
+    cplx p1n = mapPoint(p1);
+    cplx p2n = mapPoint(p2);
+    f64 a1n = (p1n + p2n).real();
+    f64 a2n = -(p1n * p2n).real();
+
+    f64 z0n = (b1 == 0.0f) ? 0.0 : mapPoint(cplx(-f64(b2) / b1, 0.0)).real();
+
+    f64 denOldDc = 1.0 - a1 - a2;
+    f64 fRef = (std::abs(denOldDc) > 1e-6) ? 0.0 : 1.0;
+
+    auto H = [](cplx z, cplx p1_, cplx p2_, f64 bb1, f64 bb2) {
+        return (bb1 * z + bb2) / (z * (z - p1_) * (z - p2_));
+    };
+
+    cplx zOldRef = std::polar(1.0, 2.0 * M_PI * fRef / kOldRate);
+    cplx zNewRef = std::polar(1.0, 2.0 * M_PI * fRef / kNewRate);
+
+    cplx hOldRef     = H(zOldRef, p1,  p2,  b1,  b2)   * zOldRef;
+    cplx shapeNewRef = H(zNewRef, p1n, p2n, 1.0, -z0n) * zNewRef;
+
+    f64 K = (hOldRef / shapeNewRef).real();
+
+    return {float(K), float(-K * z0n), float(a1n), float(a2n)};
+}
+
+/**
  * Render the audio data contributed by a single DSP channel. Reads & decodes new input samples.
  */
 static void RenderChannel(
     JASDsp::TChannel& channel,
-    ChannelAuxData& channelAux,
+    ChannelAuxData& aux,
     DspSubframe& buf) {
 
     if (channel.mResetFlag) {
-        ResetChannel(channel, channelAux);
+        ResetChannel(channel, aux);
     }
 
     // how many input samples we step per output sample, aka the resampling ratio
     auto step = static_cast<f32>(channel.mPitch) / 4096.0f;
 
     // how many input samples to resample to DSP_SUBFRAME_SIZE output samples
-    int needed = static_cast<int>(channelAux.resamplePos + DSP_SUBFRAME_SIZE * step) + 2;
+    int needed = static_cast<int>(aux.resamplePos + DSP_SUBFRAME_SIZE * step) + 2;
 
-    FillDecodeBuf(channel, channelAux, needed);
+    FillDecodeBuf(channel, aux, needed);
 
     // source ran dry, channel is finished
-    if(channelAux.decodeBufCount < needed) {
+    if(aux.decodeBufCount < needed) {
         channel.mIsFinished = true;
     }
 
-    f32 pos = channelAux.resamplePos;
-    s16 prev = channelAux.resamplePrev;
-    s16 next = channelAux.decodeBufCount > 0 ? channelAux.decodeBuf[0] : prev;
+    f32 pos = aux.resamplePos;
+    s16 prev = aux.resamplePrev;
+    s16 next = aux.decodeBufCount > 0 ? aux.decodeBuf[0] : prev;
     int srcIdx = 0;
 
     // linear resampling and f32 conversion
@@ -424,53 +486,56 @@ static void RenderChannel(
             pos -= 1.0f;
             prev = next;
             srcIdx++;
-            next = srcIdx < channelAux.decodeBufCount ? channelAux.decodeBuf[srcIdx] : prev;
+            next = srcIdx < aux.decodeBufCount ? aux.decodeBuf[srcIdx] : prev;
         }
     }
 
     // save resampler state for the next subframe, prevents popping on pitch change
-    channelAux.resamplePos = pos;
-    channelAux.resamplePrev = prev;
+    aux.resamplePos = pos;
+    aux.resamplePrev = prev;
 
     // IIR FILTER
 
     // IIR part 1, low-pass: out[n] = (in[n] - in[n-1]) * (coeff/128) + out[n-1]
-    if (s16 coeff = channel.iir_filter_params[4]; coeff != 0) {
-        for (f32& sample : buf) {
-            f32 out = std::clamp(
-                (sample - channelAux.prev_lp_in) * ((f32)coeff / 128.0f) + channelAux.prev_lp_out, -1.0f, 1.0f
-            );
-
-            channelAux.prev_lp_in = sample;        // in[n-1]  = in[n]
-            sample = channelAux.prev_lp_out = out; // out[n-1] = out[n]
-        }
-    }
+    // removed: seems to be dead code that doesn't work as intended anyway
 
     // IIR part 2, biquad: out[n] = (b1*in[n-1] + b2*in[n-2] + a1*out[n-1] + a2*out[n-2]) / 32768
     if ((channel.mFilterMode & 0x20) != 0) {
+        std::span newCoefs{channel.iir_filter_params, 4};
+        if (!std::ranges::equal(newCoefs, aux.curBiquadCoefs)) {
+            aux.remappedBiquadCoefs = RemapBiquad32to48(
+                newCoefs[0] / 32768.0f,
+                newCoefs[1] / 32768.0f,
+                newCoefs[2] / 32768.0f,
+                newCoefs[3] / 32768.0f
+            );
+            std::ranges::copy(newCoefs, aux.curBiquadCoefs.begin());
+        }
+
+        const auto coefs = aux.remappedBiquadCoefs;
         for (f32& sample : buf) {
             f32 out = std::clamp((
-                channel.iir_filter_params[0] * channelAux.biq_in1  + // b1
-                channel.iir_filter_params[1] * channelAux.biq_in2  + // b2
-                channel.iir_filter_params[2] * channelAux.biq_out1 + // a1
-                channel.iir_filter_params[3] * channelAux.biq_out2   // a2
-            ) / 32768.0f, -1.0f, 1.0f);
+                coefs.b1 * aux.biq_in1  +
+                coefs.b2 * aux.biq_in2  +
+                coefs.a1 * aux.biq_out1 +
+                coefs.a2 * aux.biq_out2
+            ), -1.0f, 1.0f);
 
             // shift history, then store new input and output
-            channelAux.biq_in2 = channelAux.biq_in1;   // in[n-2]  = in[n-1]
-            channelAux.biq_in1 = sample;               // in[n-1]  = in[n]
-            channelAux.biq_out2 = channelAux.biq_out1; // out[n-2] = out[n-1]
-            sample = channelAux.biq_out1 = out;        // out[n-1] = out[n]
+            aux.biq_in2 = aux.biq_in1;   // in[n-2]  = in[n-1]
+            aux.biq_in1 = sample;        // in[n-1]  = in[n]
+            aux.biq_out2 = aux.biq_out1; // out[n-2] = out[n-1]
+            sample = aux.biq_out1 = out; // out[n-1] = out[n]
         }
     }
 
     // move any remaining samples in the decode buf to the beginning
-    int remainingDecodeBuf = channelAux.decodeBufCount - srcIdx;
+    int remainingDecodeBuf = aux.decodeBufCount - srcIdx;
     if (remainingDecodeBuf > 0) {
-        memmove(channelAux.decodeBuf, channelAux.decodeBuf + srcIdx, remainingDecodeBuf * sizeof(s16));
+        memmove(aux.decodeBuf, aux.decodeBuf + srcIdx, remainingDecodeBuf * sizeof(s16));
     }
 
-    channelAux.decodeBufCount = std::max(0, remainingDecodeBuf);
+    aux.decodeBufCount = std::max(0, remainingDecodeBuf);
 }
 
 struct VolumeValue {

@@ -19,7 +19,9 @@
 #include "m_Do/m_Do_graphic.h"
 
 #if TARGET_PC
+#include "dusk/game_clock.h"
 #include "dusk/interp/frame_interpolation.h"
+#include "dusk/interp/user_interface.h"
 #include "dusk/version.hpp"
 #endif
 
@@ -151,6 +153,8 @@ int daTitle_c::create() {
 
     g_daTitHIO.id = mDoHIO_CREATE_CHILD("タイトルロゴ", &g_daTitHIO);
 
+    IF_DUSK(draw_interp_frame = true);
+
     return phase_state;
 }
 
@@ -168,20 +172,14 @@ int daTitle_c::Execute() {
         return 1;
     }
 
-#ifdef TARGET_PC
-    if (!dusk::interp::is_enabled()) {
-#endif
-        dMenu_Collect3D_c::setViewPortOffsetY(0.0f);
-#ifdef TARGET_PC
-    }
-#endif
+    IF_NOT_DUSK(dMenu_Collect3D_c::setViewPortOffsetY(0.0f));
 
     if (mDoRst::isReset()) {
         return 1;
     }
 
     (this->*daTitleProc[mProcID])();
-    KeyWaitAnm();
+    IF_NOT_DUSK(KeyWaitAnm());
 
 #if VERSION == VERSION_SHIELD_DEBUG
     KeyWaitPosMove();
@@ -191,6 +189,45 @@ int daTitle_c::Execute() {
 }
 
 void daTitle_c::KeyWaitAnm() {
+#if TARGET_PC
+    if (field_0x5f9 == 0) {
+        return;
+    }
+
+    const f32 duration = g_daTitHIO.mArrow;
+    if (duration <= 0.0f) {
+        field_0x600->alphaAnimeStart(0.0f);
+        field_0x600->setAlpha(255);
+        return;
+    }
+
+    f32 remaining = dusk::game_clock::original_frames();
+    f32 frame = field_0x600->getAlphaTimer();
+    if (field_0x5fa != 0) {
+        const f32 step = std::min(remaining, std::max(0.0f, duration - frame));
+        frame += step;
+        remaining -= step;
+        if (frame < duration) {
+            field_0x600->alphaAnimeStart(frame);
+            field_0x600->setAlpha(255.0f * frame / duration);
+            return;
+        }
+        field_0x5fa = 0;
+        frame = 0.0f;
+        field_0x604 = std::max(1.0f, 2.0f * g_daTitHIO.field_0x1a - 1.0f);
+    }
+
+    const f32 holdStep = std::min(remaining, field_0x604);
+    field_0x604 -= holdStep;
+    remaining -= holdStep;
+    const f32 period = duration + std::max(0.0f, g_daTitHIO.field_0x1a - 1.0f);
+    frame = std::fmod(frame + remaining, period);
+    field_0x600->alphaAnimeStart(frame);
+    const f32 pulse = std::min(frame, duration);
+    const f32 half = std::max(1.0f, std::floor(duration / 2.0f));
+    const f32 rate = std::min(1.0f, std::min(pulse, duration - pulse) / half);
+    field_0x600->setAlpha(255.0f - 127.0f * rate);
+#else
     if (field_0x5f9 != 0) {
         if (field_0x604 == 0) {
             if (field_0x5fa != 0) {
@@ -211,6 +248,7 @@ void daTitle_c::KeyWaitAnm() {
             field_0x604--;
         }
     }
+#endif
 }
 
 #if VERSION == VERSION_SHIELD_DEBUG
@@ -380,6 +418,15 @@ int daTitle_c::getDemoPrm() {
 }
 
 int daTitle_c::Draw() {
+#if TARGET_PC
+    if (field_0x600 != NULL && dusk::game_clock::is_presentation_frame()) {
+        if (!fopOvlpM_IsPeek() && !mDoRst::isReset()) {
+            KeyWaitAnm();
+        }
+        field_0x600->presentAlphaAnime();
+    }
+#endif
+
     J3DModelData* modelData = mpModel->getModelData();
     cMtx_trans(mpModel->getBaseTRMtx(), IREG_F(7), IREG_F(8), IREG_F(9) + -430.0f);
     mpModel->getBaseScale()->x = -1.0f;
@@ -389,6 +436,7 @@ int daTitle_c::Draw() {
     mBrk.entry(modelData);
     mBtk.entry(modelData);
 
+    IF_DUSK(dMenu_Collect3D_c::setViewPortOffsetY(0.0f));
     dComIfGd_setListItem3D();
     mDoExt_modelUpdateDL(mpModel);
     dComIfGd_setList();

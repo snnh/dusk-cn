@@ -19,7 +19,7 @@
 #include <cstring>
 
 #if TARGET_PC
-#include "dusk/interp/frame_interpolation.h"
+#include "dusk/interp/user_interface.h"
 #endif
 
 dMeterString_c::dMeterString_c(int i_stringID) {
@@ -109,22 +109,20 @@ void dMeterString_c::draw() {
             f32 var_f30 = 1.0f;
 
             if (mAnimFrame < 60.0f) {
-                IF_DUSK_BLOCK(dusk::interp::get_ui_tick_pending())
+#if TARGET_PC
+                dusk::vdt::advance_toward_frame(mAnimFrame, 60.0f, g_drawHIO.mMiniGame.mReadyFightTextAnimSpeed);
+#else
                 mAnimFrame += g_drawHIO.mMiniGame.mReadyFightTextAnimSpeed;
                 if (mAnimFrame > 60.0f) {
                     mAnimFrame = 60.0f;
                 }
-                IF_DUSK_BLOCK_END
+#endif
 
                 playBckAnimation(mAnimFrame);
             } else if (mAnimFrame < (f32)g_drawHIO.mMiniGame.mReadyFightTextWaitFrames + 60.0f) {
-                IF_DUSK_BLOCK(dusk::interp::get_ui_tick_pending())
-                mAnimFrame += var_f30;
-                IF_DUSK_BLOCK_END
+                DUSK_IF_ELSE(dusk::vdt::advance_toward_frame(mAnimFrame, (f32)g_drawHIO.mMiniGame.mReadyFightTextWaitFrames + 60.0f, 1.0f), mAnimFrame += var_f30);
             } else if (mAnimFrame < var_f31) {
-                IF_DUSK_BLOCK(dusk::interp::get_ui_tick_pending())
-                mAnimFrame += var_f30;
-                IF_DUSK_BLOCK_END
+                DUSK_IF_ELSE(dusk::vdt::advance_toward_frame(mAnimFrame, var_f31, 1.0f), mAnimFrame += var_f30);
                 var_f30 = acc(g_drawHIO.mMiniGame.field_0x172, var_f31 - mAnimFrame, 0);
             }
 
@@ -137,17 +135,15 @@ void dMeterString_c::draw() {
 
             if (mPikariAnimFrame > 0.0f) {
                 drawPikari();
-            } else if (mPikariAnimFrame == -1.0f IF_DUSK(&& dusk::interp::get_ui_tick_pending()) &&
+            } else if (mPikariAnimFrame == -1.0f &&
                        mAnimFrame > g_drawHIO.mMiniGame.mReadyFightPikariAppearFrames)
             {
                 mPikariAnimFrame = 18.0f - g_drawHIO.mMiniGame.mReadyFightPikariAnimSpeed;
             }
 
-            IF_DUSK_BLOCK(dusk::interp::get_ui_tick_pending())
             if (mAnimFrame >= var_f31) {
                 dMeter2Info_resetMeterString();
             }
-            IF_DUSK_BLOCK_END
         }
     }
 }

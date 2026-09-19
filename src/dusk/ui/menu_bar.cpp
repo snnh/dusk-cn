@@ -2,6 +2,7 @@
 
 #include "achievements.hpp"
 #include "editor.hpp"
+#include "mod_updates.hpp"
 #include "modal.hpp"
 #include "mods_window.hpp"
 #include "prelaunch.hpp"
@@ -34,6 +35,7 @@ const Rml::String kDocumentSource = R"RML(
 <rml>
 <head>
     <link type="text/rcss" href="res/rml/theme.rcss" />
+    <link type="text/rcss" href="res/rml/mod_common.rcss" />
     <link type="text/rcss" href="res/rml/tabbing.rcss" />
     <link type="text/rcss" href="res/rml/popup.rcss" />
 </head>
@@ -42,7 +44,6 @@ const Rml::String kDocumentSource = R"RML(
 </body>
 </rml>
 )RML";
-
 }
 
 MenuBar::MenuBar()
@@ -83,7 +84,7 @@ void MenuBar::build_tabs() {
         mTabBar->add_tab(
             "[ACHIEVEMENTS]", [this] { push(std::make_unique<AchievementsWindow>()); });
     }
-    mTabBar->add_tab("[MODS]", [this] { push(std::make_unique<ModsWindow>()); });
+    mModsButton = &mTabBar->add_tab("[MODS]", [this] { push(std::make_unique<ModsWindow>()); });
     for (auto& tab : mods::svc::ui_mod_menu_tabs()) {
         mTabBar->add_tab(tab.label, std::move(tab.onSelected));
     }
@@ -189,6 +190,9 @@ void MenuBar::hide(bool close) {
 }
 
 void MenuBar::update() {
+    if (mModsButton) {
+        set_mod_update_badge(*mModsButton);
+    }
     update_safe_area();
     Document::update();
 }

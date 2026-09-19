@@ -57,6 +57,9 @@ public:
 #endif
     void drawPikari(int);
 
+#if TARGET_PC
+    void presentAnims();
+#endif
     virtual void draw();
     virtual ~dDlst_TimerScrnDraw_c();
 
@@ -68,10 +71,15 @@ public:
     void resetCowID() { mCowID = 0; }
     bool isVisible() { return mTimerVisible; }
 
-    f32 acc(s16 param_0, s16 param_1, s16 param_2) {
+    f32 acc(DUSK_IF_ELSE(f32, s16) param_0, DUSK_IF_ELSE(f32, s16) param_1, DUSK_IF_ELSE(f32, s16) param_2) {
+#if TARGET_PC
+        if (param_0 == param_2) {
+            return 1.0f;
+        }
+#endif
         return ((f32)(param_1 - param_2) * (f32)(param_1 - param_2)) / ((f32)(param_0 - param_2) * (f32)(param_0 - param_2));
     }
-    
+
     void setTimerTrans(f32 x, f32 y) {
         mTimerTransX = x;
         mTimerTransY = y;
@@ -103,7 +111,7 @@ public:
     /* 0x3CC */ int field_0x3CC;
     /* 0x3D0 */ int field_0x3D0;
     /* 0x3D4 */ int field_0x3D4;
-    /* 0x3D8 */ int field_0x3D8;
+    /* 0x3D8 */ DUSK_IF_ELSE(f32, int) field_0x3D8;
     /* 0x3DC */ u8 mCowID;
     /* 0x3DD */ u8 mHIOType;
     /* 0x3DE */ u8 field_0x3DE;

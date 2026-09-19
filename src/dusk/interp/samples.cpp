@@ -1,4 +1,4 @@
-#include "dusk/interp/dual_buffer.h"
+#include "dusk/interp/samples.h"
 
 #include <absl/container/flat_hash_map.h>
 #include <vector>
@@ -35,7 +35,7 @@ void* detail::acquire(const void* key, const void* type, void* (*make)(), void (
     return ptr;
 }
 
-void erase_owned_buffers(const void* key) {
+void erase_owned_samples(const void* key) {
     if (key == nullptr) {
         return;
     }
@@ -52,7 +52,7 @@ void erase_owned_buffers(const void* key) {
     stored.erase(it);
 }
 
-void clear_owned_buffers() {
+void clear_owned_samples() {
     OwnerMap& stored = owner_map();
     for (auto& entry : stored) {
         for (Slot& slot : entry.second) {

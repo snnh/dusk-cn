@@ -308,6 +308,7 @@
   <entry key="ENABLES_THE_REVERB_EFFECT_IN_GAME_AUDIO">启用游戏音频中的混响效果。</entry>
   <entry key="ENABLES_TWIN_STICK_CAMERA_CONTROL_LETTING_THE_C_STICK_MOVE_THE_CAMERA_VE">启用双摇杆视角控制，使C摇杆可以上下左<br/>右移动视角。</entry>
   <entry key="FASTER_CLIMBING">更快地攀爬</entry>
+  <entry key="FASTER_SCENE_TRANSITIONS">更快的场景切换</entry>
   <entry key="FASTER_TEARS_OF_LIGHT">更快的光之滴</entry>
   <entry key="FREE_CAMERA">自由视角</entry>
   <entry key="FREE_CAMERA_SENSITIVITY">自由视角灵敏度</entry>
@@ -320,7 +321,9 @@
   <entry key="GYRO_YAW_SENSITIVITY">陀螺仪偏航灵敏度</entry>
   <entry key="HEARTS_WILL_NEVER_DROP_FROM_ENEMIES_POTS_AND_VARIOUS_OTHER_PLACES">敌人、罐子和其他地方将不会掉落生命之心<br/>。</entry>
   <entry key="HOLD_B_FOR_INSTANT_TEXT">按住B键快速跳过对话</entry>
+  <entry key="HOLD_BUTTON_TO_MASH">按住按键连打</entry>
   <entry key="HOLD_TAB_TO_INCREASE_GAME_SPEED_BY_UP_TO_4X">按住Tab键将游戏速度提升至最多4倍。</entry>
+  <entry key="HOLD_THE_INDICATED_BUTTON_TO_MASH_AUTOMATICALLY">按住指定按键即可自动连打。</entry>
   <entry key="IGNORES_SMALL_GYRO_MOVEMENT_TO_REDUCE_DRIFT_AND_JITTER">忽略陀螺仪的微小移动以减少漂移和抖动。</entry>
   <entry key="INSTANT_DEATH">一击即死</entry>
   <entry key="INSTANT_SAVES">快速保存存档</entry>
@@ -363,6 +366,7 @@
   <entry key="PREVENTS_LINK_FROM_PLAYING_A_STRUGGLE_ANIMATION_WHEN_GRABBING_LEDGES_OR">林克在抓住边缘或攀爬藤蔓时不会播放挣扎<br/>动画。</entry>
   <entry key="QUICK_TRANSFORM_R_Y">快速变身（R+Y）</entry>
   <entry key="QUICKER_CLIMBING_ON_LADDERS_AND_VINES_LIKE_THE_HD_VERSION">在梯子和藤蔓上攀爬更快，与HD版本一样<br/>。</entry>
+  <entry key="REDUCES_HOW_LONG_THE_TRANSITIONS_TAKE_WHEN_CHANGING_MAPS">缩短更换地图时过渡动画的时长。</entry>
   <entry key="RESET_KEY">重置键</entry>
   <entry key="RESTORE_DEFAULT_WINDOW_SIZE">恢复默认窗口大小</entry>
   <entry key="RESTORE_WII_1_0_GLITCHES">恢复Wii 1.0漏洞</entry>
@@ -413,6 +417,8 @@
   <entry key="CHEAT_NO_ITEM_TIMER_HELP">掉落的物品如卢比和生命之心将不会消失。</entry>
   <entry key="CHEAT_MOON_JUMP_R_A">月亮跳（R+A）</entry>
   <entry key="CHEAT_MOON_JUMP_R_A_HELP">按住R键和A键上升到空中。</entry>
+  <entry key="CHEAT_EASY_QUICK_SPIN_R_B">简易快速旋转（R+B）</entry>
+  <entry key="CHEAT_EASY_QUICK_SPIN_R_B_HELP">按住R键时，以B键攻击总会发动快速旋转。</entry>
   <entry key="CHEAT_SUPER_CLAWSHOT">超级钩爪</entry>
   <entry key="CHEAT_SUPER_CLAWSHOT_HELP">强化钩爪性能，突破原版游戏限制。</entry>
   <entry key="CHEAT_ALWAYS_GREATSPIN">永久大回旋斩</entry>

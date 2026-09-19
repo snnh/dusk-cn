@@ -42,12 +42,18 @@ public:
     virtual ~dSelect_cursor_c();
     virtual void draw();
 
+#if TARGET_PC
+    void setInterp(bool enabled);
+    void setPos(f32 x, f32 y, const cXyz* world = nullptr);
+    void setWorldPos(const cXyz& position, f32 offsetX, f32 offsetY) { setPos(offsetX, offsetY, &position); }
+#else
     void setPos(f32 x, f32 y) {
         mPositionX = x;
         mPositionY = y;
     }
+#endif
 
-#ifdef TARGET_PC
+#if TARGET_PC
     f32 getPositionX() const { return mPositionX; }
     f32 getPositionY() const { return mPositionY; }
 
@@ -100,6 +106,11 @@ public:
     /* 0xB5 */ u8 mNameIdx;
     /* 0xB6 */ u8 field_0xb6;
     /* 0xB7 */ bool mUpdateFlag;
+#if TARGET_PC
+    cXyz mWorldPosition{0.0f, 0.0f, 0.0f};
+    bool mWorldCursor = false;
+    bool mInterpolatePosition = true;
+#endif
 };
 
 #endif /* D_D_SELECT_CURSOR_H */

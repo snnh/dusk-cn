@@ -17,17 +17,13 @@
 class daObjKLift00_c : public dBgS_MoveBgActor, public request_of_phase_process_class {
 public:
     cPhs_Step create1st();
-    void setMtx();
+    void setMtx(IF_DUSK(bool presentation = false));
     void rideActor(fopAc_ac_c*);
     int CreateHeap();
     int Create();
     int Execute(Mtx**);
     int Draw();
     int Delete();
-
-#if TARGET_PC
-    void onInterpPresentation();
-#endif
 
     enum Param_e {
         LOCK_e = (1 << 6), NO_BASE_DISP = (1 << 7)

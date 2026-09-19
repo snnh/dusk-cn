@@ -317,6 +317,7 @@ template class ConfigImpl<DepthOfFieldMode>;
 template class ConfigImpl<DiscVerificationState>;
 template class ConfigImpl<GameLanguage>;
 template class ConfigImpl<AudioOutputMode>;
+template class ConfigImpl<LetterboxMode>;
 
 template <>
 void ConfigImpl<FrameInterpMode>::loadFromJson(
@@ -395,6 +396,7 @@ template class ConfigImpl<FrameInterpMode>;
 template class ConfigImpl<TouchTargeting>;
 template class ConfigImpl<MenuScaling>;
 template class ConfigImpl<Resampler>;
+template class ConfigImpl<AlwaysGreatspinMode>;
 template class ConfigImpl<MagicArmorMode>;
 template class ConfigImpl<ui::ControlLayout>;
 
@@ -476,6 +478,11 @@ static void LoadFromPath(const char* path) {
     if (!j.is_object()) {
         DuskConfigLog.error("Config JSON is not an object!");
         return;
+    }
+
+    // Configure mod update checks from the existing Dusklight updates cvar
+    if (!j.contains("backend.checkForModUpdates") && j.contains("backend.checkForUpdates")) {
+        j["backend.checkForModUpdates"] = j["backend.checkForUpdates"];
     }
 
     UnregisteredConfigVars.clear();

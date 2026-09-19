@@ -1,5 +1,6 @@
 #pragma once
 
+#include "JSystem/JUtility/TColor.h"
 #include "SSystem/SComponent/c_angle.h"
 #include "SSystem/SComponent/c_sxyz.h"
 #include "SSystem/SComponent/c_xyz.h"
@@ -22,6 +23,10 @@ inline u16 lerp(u16 lhs, u16 rhs, float step) {
 
 inline f32 lerp(f32 lhs, f32 rhs, float step) {
     return lhs + (rhs - lhs) * step;
+}
+
+inline void lerp(f32& out, const f32& lhs, const f32& rhs, float step) {
+    out = lerp(lhs, rhs, step);
 }
 
 inline u8 lerp(u8 lhs, u8 rhs, float step) {
@@ -47,6 +52,18 @@ inline void lerp(Mtx& out, const Mtx& lhs, const Mtx& rhs, float step) {
             out[row][col] = l + (rhs[row][col] - l) * step;
         }
     }
+}
+
+inline Vec lerp(const Vec& lhs, const Vec& rhs, float step) {
+    return {lerp(lhs.x, rhs.x, step), lerp(lhs.y, rhs.y, step), lerp(lhs.z, rhs.z, step)};
+}
+
+inline JUtility::TColor lerp(const JUtility::TColor& lhs, const JUtility::TColor& rhs, float step) {
+    return JUtility::TColor(
+        lerp(lhs.r, rhs.r, step),
+        lerp(lhs.g, rhs.g, step),
+        lerp(lhs.b, rhs.b, step),
+        lerp(lhs.a, rhs.a, step));
 }
 
 }  // namespace dusk::interp

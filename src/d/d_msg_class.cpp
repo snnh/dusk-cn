@@ -13,6 +13,7 @@
 #include "JSystem/JUtility/JUTFont.h"
 
 #if TARGET_PC
+#include "dusk/interp/user_interface.h"
 #include "dusk/menu_pointer.h"
 #include "dusk/scope_guard.hpp"
 #include "dusk/version.hpp"
@@ -906,6 +907,16 @@ bool jmessage_tReference::isLightEnd() {
 
     return false;
 }
+
+#if TARGET_PC
+void jmessage_tReference::addCharAlpha() {
+    dusk::vdt::advance_toward_frame(mCharAlpha, 255.0f, mAddCharAlpha);
+}
+
+void jmessage_tReference::addCharAllAlphaRate() {
+    mCharAllAlphaRate = std::min(mCharAllAlphaRate + mAddCharAllAlphaRate, 1.0f);
+}
+#endif
 
 void jmessage_tReference::decideOutFontRupeeColor(int i_inputVal) {
     int price_diff = getObjectPtr()->getNowTotalPrice() - getObjectPtr()->getNowTotalPayment();

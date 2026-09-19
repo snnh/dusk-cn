@@ -68,7 +68,7 @@ public:
     /* 0x5FB */ u8 mProcID;
     /* 0x5FC */ u8 mWaitTimer;
     /* 0x600 */ CPaneMgrAlpha* field_0x600;
-    /* 0x604 */ u8 field_0x604;
+    /* 0x604 */ DUSK_IF_ELSE(f32, u8) field_0x604;
 };  // Size: 0x608
 
 typedef void (daTitle_c::*procFunc)();

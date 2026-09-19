@@ -1,22 +1,8 @@
 diff --git a/extern/CMakeLists.txt b/extern/CMakeLists.txt
-index e1feaca..8b6a691 100644
+index 69682dd..574e703 100644
 --- a/extern/CMakeLists.txt
 +++ b/extern/CMakeLists.txt
-@@ -3,10 +3,10 @@ include(FetchContent)
- # Don't build tests for third party dependencies
- set(BUILD_TESTING OFF CACHE INTERNAL "Build tests")
- set(SKIP_INSTALL_ALL ON)
--if (NOT DEFINED BUILD_SHARED_LIBS)
--  set(_USE_SHARED ON)
-+if (DEFINED BUILD_SHARED_LIBS)
-+  set(_USE_SHARED ${BUILD_SHARED_LIBS})
- else ()
--  set(_USE_SHARED OFF)
-+  set(_USE_SHARED ON)
- endif ()
- 
- function(aurora_find_package_global)
-@@ -116,7 +116,7 @@ if (AURORA_ENABLE_GX)
+@@ -125,7 +125,7 @@ if (AURORA_ENABLE_GX)
    endif ()
    if (NOT TARGET ZLIB::ZLIB)
      message(STATUS "aurora: Fetching zlib")
@@ -25,7 +11,7 @@ index e1feaca..8b6a691 100644
      set(ZLIB_BUILD_TESTING OFF CACHE BOOL "Enable Zlib Examples as tests" FORCE)
      set(ZLIB_INSTALL OFF CACHE BOOL "Enable installation of zlib" FORCE)
      set(ZLIB_COMPAT ON CACHE BOOL "Use the compat version of zlib instead of the newer zlib-ng" FORCE)
-@@ -132,8 +132,36 @@ if (AURORA_ENABLE_GX)
+@@ -141,8 +141,36 @@ if (AURORA_ENABLE_GX)
        DOWNLOAD_EXTRACT_TIMESTAMP FALSE
        EXCLUDE_FROM_ALL
      )
@@ -203,7 +189,7 @@ index 85a4285..e47c8df 100644
    GX_WRITE_AURORA(GX_AURORA_BEGIN_OFFSCREEN);
    GX_WRITE_U32(width);
 diff --git a/lib/gfx/encoding.cpp b/lib/gfx/encoding.cpp
-index b3054be..f09011b 100644
+index 777bdd2..3af36fd 100644
 --- a/lib/gfx/encoding.cpp
 +++ b/lib/gfx/encoding.cpp
 @@ -221,6 +221,11 @@ void render(wgpu::CommandEncoder& cmd, FramePacket& frame, RenderPass& passInfo,
@@ -234,10 +220,10 @@ index b3054be..f09011b 100644
      };
      depthStencilAttachmentPtr = &depthStencilAttachment;
 diff --git a/lib/gfx/recording.cpp b/lib/gfx/recording.cpp
-index d04db0f..0cc3210 100644
+index e496713..a7afbd4 100644
 --- a/lib/gfx/recording.cpp
 +++ b/lib/gfx/recording.cpp
-@@ -99,7 +99,9 @@ void set_efb_targets(RenderPass& pass) {
+@@ -105,7 +105,9 @@ void set_efb_targets(RenderPass& pass) {
        webgpu::g_graphicsConfig.msaaSamples > 1 ? webgpu::g_frameBufferResolved.texture : webgpu::g_frameBuffer.texture;
    pass.copySourceView =
        webgpu::g_graphicsConfig.msaaSamples > 1 ? webgpu::g_frameBufferResolved.view : webgpu::g_frameBuffer.view;
@@ -245,10 +231,10 @@ index d04db0f..0cc3210 100644
 +  // Dusk: sample the depth-only aspect — binding all aspects of a depth-stencil texture as
 +  // texture_depth_2d is invalid (and fatal on D3D12 with newer Dawn).
 +  pass.copySourceDepthView = webgpu::g_depthBuffer.sampleView;
-   pass.msaaSamples = layout.sampleCount;
-   pass.hasDepth = true;
-   pass.hasStencil = false;
-@@ -376,11 +378,18 @@ OffscreenCacheEntry get_offscreen_textures(uint32_t width, uint32_t height) {
+   if (webgpu::g_graphicsConfig.normalBuffer) {
+     pass.copySourceNormalTexture = webgpu::g_normalBuffer.texture;
+   }
+@@ -406,11 +408,18 @@ OffscreenCacheEntry get_offscreen_textures(uint32_t width, uint32_t height) {
    };
    auto depthTexture = webgpu::g_device.CreateTexture(&depthDesc);
    auto depthView = depthTexture.CreateView();
@@ -267,7 +253,7 @@ index d04db0f..0cc3210 100644
    };
    OffscreenCacheEntry entry{
        .color = std::move(color),
-@@ -462,7 +471,7 @@ void start_offscreen(uint32_t width, uint32_t height) {
+@@ -493,7 +502,7 @@ void start_offscreen(uint32_t width, uint32_t height) {
        .depthStencilFormat = g_recorder.offscreenDepth.format,
        .copySourceTexture = g_recorder.offscreenColor.texture,
        .copySourceView = g_recorder.offscreenColor.view,
@@ -277,10 +263,10 @@ index d04db0f..0cc3210 100644
        .clearDepthValue = gx::UseReversedZ ? 0.f : 1.f,
        .clearDepth = true,
 diff --git a/lib/gx/command_processor.cpp b/lib/gx/command_processor.cpp
-index a84fef2..e3ccd25 100644
+index 14ab8e1..47f46f9 100644
 --- a/lib/gx/command_processor.cpp
 +++ b/lib/gx/command_processor.cpp
-@@ -466,6 +466,7 @@ static void push_gx_draw(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, gfx::Rang
+@@ -469,6 +469,7 @@ static void push_gx_draw(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount, gfx::Rang
        .instanceCount = instanceCount,
        .bindGroups = cache.bindGroups,
        .dstAlpha = state.dstAlpha,
@@ -288,7 +274,7 @@ index a84fef2..e3ccd25 100644
    });
  }
  
-@@ -696,6 +697,31 @@ void handle_aurora(ByteReader& reader) noexcept {
+@@ -699,6 +700,31 @@ void handle_aurora(ByteReader& reader) noexcept {
      gfx::begin_offscreen(width, height);
    } else if (subCmd == GX_AURORA_END_OFFSCREEN) {
      gfx::end_offscreen();
@@ -321,7 +307,7 @@ index a84fef2..e3ccd25 100644
      evict_texture_object(reader.read<u32>());
    } else if (subCmd == GX_AURORA_DESTROY_TLUT) {
 diff --git a/lib/gx/gx.cpp b/lib/gx/gx.cpp
-index b12b327..d46de0c 100644
+index 8a8598e..5ffbd50 100644
 --- a/lib/gx/gx.cpp
 +++ b/lib/gx/gx.cpp
 @@ -108,6 +108,22 @@ wgpu::CompareFunction to_compare_function(GXCompare func) {
@@ -347,10 +333,10 @@ index b12b327..d46de0c 100644
  wgpu::BlendState to_blend_state(GXBlendMode mode, GXBlendFactor srcFac, GXBlendFactor dstFac, GXLogicOp op,
                                  u32 dstAlpha) {
    wgpu::BlendComponent colorBlendComponent;
-@@ -319,10 +335,23 @@ wgpu::RenderPipeline build_pipeline(const PipelineConfig& config, ArrayRef<wgpu:
-   const float depthBias = (UseReversedZ ? -1.0f : 1.0f) * std::bit_cast<float>(config.polygonOffsetBits);
+@@ -321,10 +337,23 @@ wgpu::RenderPipeline build_pipeline(const PipelineConfig& config, const gfx::Ren
    const float depthBiasSlopeScale = (UseReversedZ ? -1.0f : 1.0f) * std::bit_cast<float>(config.polygonOffsetScaleBits);
    const float depthBiasClamp = webgpu::g_hasCoreFeatures ? std::bit_cast<float>(config.polygonOffsetClampBits) : 0.0f;
+   const bool writesDepth = config.depthCompare && config.depthUpdate;
 +  const bool stencilOn = g_graphicsConfig.depthStencilSupported && config.stencilEnable != 0;
 +  const wgpu::StencilFaceState stencilFace =
 +      stencilOn ? wgpu::StencilFaceState{
@@ -361,8 +347,8 @@ index b12b327..d46de0c 100644
 +                  }
 +                : wgpu::StencilFaceState{};
    const wgpu::DepthStencilState depthStencil{
-       .format = g_graphicsConfig.depthFormat,
-       .depthWriteEnabled = config.depthCompare && config.depthUpdate,
+       .format = layout.depthStencilFormat,
+       .depthWriteEnabled = writesDepth,
        .depthCompare = config.depthCompare ? to_compare_function(config.depthFunc) : wgpu::CompareFunction::Always,
 +      .stencilFront = stencilFace,
 +      .stencilBack = stencilFace,
@@ -371,7 +357,7 @@ index b12b327..d46de0c 100644
        .depthBias = round_away_from_zero<int32_t>(depthBias),
        .depthBiasSlopeScale = depthBiasSlopeScale,
        .depthBiasClamp = depthBiasClamp,
-@@ -464,6 +493,14 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
+@@ -468,6 +497,14 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
        .depthUpdate = g_gxState.depthUpdate,
        .alphaUpdate = g_gxState.alphaUpdate,
        .colorUpdate = g_gxState.colorUpdate,
@@ -387,7 +373,7 @@ index b12b327..d46de0c 100644
  }
  
 diff --git a/lib/gx/gx.hpp b/lib/gx/gx.hpp
-index a97b987..8ef0cba 100644
+index 3dbfd5d..44920c9 100644
 --- a/lib/gx/gx.hpp
 +++ b/lib/gx/gx.hpp
 @@ -380,6 +380,14 @@ struct GXState {
@@ -406,10 +392,10 @@ index a97b987..8ef0cba 100644
    u8 numIndStages = 0;
    u8 numTevStages = 0;
 diff --git a/lib/gx/pipeline.cpp b/lib/gx/pipeline.cpp
-index 0c3631c..f2d42f7 100644
+index 7b8e0d4..122f4e9 100644
 --- a/lib/gx/pipeline.cpp
 +++ b/lib/gx/pipeline.cpp
-@@ -38,6 +38,9 @@ void render(const DrawData& data, const wgpu::RenderPassEncoder& pass) {
+@@ -37,6 +37,9 @@ void render(const DrawData& data, const wgpu::RenderPassEncoder& pass) {
      const wgpu::Color color{0.f, 0.f, 0.f, data.dstAlpha / 255.f};
      pass.SetBlendConstant(&color);
    }
@@ -420,7 +406,7 @@ index 0c3631c..f2d42f7 100644
      pass.Draw(data.vtxCount, data.instanceCount);
    } else {
 diff --git a/lib/gx/pipeline.hpp b/lib/gx/pipeline.hpp
-index 1abcbd5..472273b 100644
+index 0863a10..61d960f 100644
 --- a/lib/gx/pipeline.hpp
 +++ b/lib/gx/pipeline.hpp
 @@ -15,9 +15,10 @@ struct DrawData {
@@ -434,7 +420,7 @@ index 1abcbd5..472273b 100644
 +constexpr uint32_t GXPipelineConfigVersion = 14;
  struct PipelineConfig {
    uint32_t version = GXPipelineConfigVersion;
-   uint32_t msaaSamples = 1;
+   uint32_t msaaSamples = 1; // deprecated
 @@ -32,6 +33,14 @@ struct PipelineConfig {
    uint32_t polygonOffsetScaleBits;
    uint32_t polygonOffsetClampBits;
@@ -464,10 +450,10 @@ index 0c3925b..4d6f01e 100644
  
  // Blend mode / cmode0 (0x41)
 diff --git a/lib/rmlui.cpp b/lib/rmlui.cpp
-index ad0cab9..eb23785 100644
+index c82409d..5113ec5 100644
 --- a/lib/rmlui.cpp
 +++ b/lib/rmlui.cpp
-@@ -401,6 +401,14 @@ void set_input_type(InputType type) noexcept {
+@@ -403,6 +403,14 @@ void set_input_type(InputType type) noexcept {
    }
  }
  
@@ -529,10 +515,10 @@ index 9fc6703..be33f47 100644
  
  } // namespace aurora::rmlui
 diff --git a/lib/webgpu/gpu.cpp b/lib/webgpu/gpu.cpp
-index 592b8ab..4a4cf7e 100644
+index ec29c08..ce3856c 100644
 --- a/lib/webgpu/gpu.cpp
 +++ b/lib/webgpu/gpu.cpp
-@@ -69,10 +69,68 @@ bool g_bcTexturesSupported = false;
+@@ -70,10 +70,68 @@ bool g_bcTexturesSupported = false;
  bool g_astcTexturesSupported = false;
  bool g_textureComponentSwizzleSupported = false;
  static std::atomic_bool g_initialized = false;
@@ -601,7 +587,7 @@ index 592b8ab..4a4cf7e 100644
  AuroraLogLevel wgpu_log_level(wgpu::LoggingType type) {
    switch (type) {
    case wgpu::LoggingType::Verbose:
-@@ -384,6 +442,13 @@ static TextureWithSampler create_depth_texture(uint32_t width, uint32_t height)
+@@ -385,6 +443,13 @@ static TextureWithSampler create_depth_texture(uint32_t width, uint32_t height)
    };
    auto view = texture.CreateView(&viewDescriptor);
  
@@ -615,7 +601,7 @@ index 592b8ab..4a4cf7e 100644
    const wgpu::SamplerDescriptor samplerDescriptor{
        .label = "Depth sampler",
        .addressModeU = wgpu::AddressMode::ClampToEdge,
-@@ -404,6 +469,7 @@ static TextureWithSampler create_depth_texture(uint32_t width, uint32_t height)
+@@ -405,6 +470,7 @@ static TextureWithSampler create_depth_texture(uint32_t width, uint32_t height)
        .size = size,
        .format = format,
        .sampler = std::move(sampler),
@@ -623,7 +609,7 @@ index 592b8ab..4a4cf7e 100644
    };
  }
  
-@@ -893,6 +959,7 @@ bool initialize(AuroraBackend auroraBackend, bool allowCpu) {
+@@ -923,6 +989,7 @@ bool initialize(AuroraBackend auroraBackend, bool allowCpu) {
      g_bcTexturesSupported = false;
      g_astcTexturesSupported = false;
      g_textureComponentSwizzleSupported = false;
@@ -631,7 +617,7 @@ index 592b8ab..4a4cf7e 100644
      wgpu::SupportedFeatures supportedFeatures;
      g_adapter.GetFeatures(&supportedFeatures);
      for (size_t i = 0; i < supportedFeatures.featureCount; ++i) {
-@@ -925,14 +992,14 @@ bool initialize(AuroraBackend auroraBackend, bool allowCpu) {
+@@ -955,14 +1022,14 @@ bool initialize(AuroraBackend auroraBackend, bool allowCpu) {
      Log.info("Enabling features: {}", featureList);
  #ifdef WEBGPU_DAWN
      wgpu::DawnCacheDeviceDescriptor cacheDescriptor({.nextInChain = nullptr});
@@ -654,7 +640,7 @@ index 592b8ab..4a4cf7e 100644
  
      constexpr std::array enableToggles{
  #if _WIN32
-@@ -1038,9 +1105,10 @@ bool initialize(AuroraBackend auroraBackend, bool allowCpu) {
+@@ -1067,9 +1134,10 @@ bool initialize(AuroraBackend auroraBackend, bool allowCpu) {
                .height = size.native_fb_height,
                .presentMode = presentMode,
            },
@@ -667,18 +653,18 @@ index 592b8ab..4a4cf7e 100644
    create_copy_pipeline();
    create_resample_pipeline();
 diff --git a/lib/webgpu/gpu.hpp b/lib/webgpu/gpu.hpp
-index 3943da0..d1ceee6 100644
+index f9cb479..87cbb25 100644
 --- a/lib/webgpu/gpu.hpp
 +++ b/lib/webgpu/gpu.hpp
-@@ -16,6 +16,7 @@ struct GraphicsConfig {
-   wgpu::TextureFormat depthFormat;
+@@ -19,6 +19,7 @@ struct GraphicsConfig {
    uint32_t msaaSamples;
    uint16_t textureAnisotropy;
+   bool normalBuffer = false;
 +  bool depthStencilSupported = false;
  };
  struct TextureWithSampler {
    wgpu::Texture texture;
-@@ -23,6 +24,7 @@ struct TextureWithSampler {
+@@ -26,6 +27,7 @@ struct TextureWithSampler {
    wgpu::Extent3D size;
    wgpu::TextureFormat format;
    wgpu::Sampler sampler;

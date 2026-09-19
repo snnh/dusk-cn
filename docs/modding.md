@@ -719,8 +719,8 @@ Writes that store the same value are silent. Values applied from `config.json` o
 
 ### SaveService ([`mods/svc/save.h`](../sdk/include/mods/svc/save.h))
 
-Stores named binary blobs for each save slot. Blob names are scoped to the calling mod, and each mod may store up to
-`SAVE_BLOB_BUDGET_BYTES` per slot. The service copies data passed to `set_blob`.
+Allows reading and writing binary blobs associated with save slots. Blobs are scoped to your mod and the active game
+mode's save file. A mod may store up to `SAVE_BLOB_BUDGET_BYTES` per slot.
 
 ```cpp
 IMPORT_SERVICE(SaveService, svc_save);
@@ -743,8 +743,8 @@ if (svc_save->get_blob(mod_ctx, "state", &loaded, &loadedSize) == MOD_OK &&
 
 `set_blob`, `get_blob`, and `delete_blob` operate on the current slot, which is available after creating or loading a
 save and unavailable at file select. Blob changes are written with the next game save. File-select copy and erase
-operations update the blob data as well. Use `peek_blob` to read the calling mod's data from any slot; it uses the same
-buffer contract as `get_blob`. Pass a `NULL` buffer to either read function to query the blob size.
+operations update the blob data as well. Use `peek_blob` to read the calling mod's data from any slot in the active save
+file. Pass a `NULL` buffer to either read function to query the blob size.
 
 `observe_saves` registers callbacks for new, loaded, and written saves. New-save callbacks run after the slot's blobs
 are cleared. Observers are removed automatically when the mod is detached, so the output handle is only needed for
@@ -852,8 +852,9 @@ per-window RCSS. A non-`MOD_OK` result from `build`/`update` fails your mod, as 
 callback.
 
 **Controls:** `pane_add_control` adds an input row described by a `UiControlDesc`: `UI_CONTROL_BUTTON`,
-`UI_CONTROL_GROUP`, `UI_CONTROL_TOGGLE`, `UI_CONTROL_NUMBER`, `UI_CONTROL_STRING`, `UI_CONTROL_SELECT`, or
-`UI_CONTROL_COLOR`. Values bind with callbacks or directly to a config var.
+`UI_CONTROL_GROUP`, `UI_CONTROL_TOGGLE`, `UI_CONTROL_NUMBER`, `UI_CONTROL_STRING`, `UI_CONTROL_SELECT`,
+`UI_CONTROL_COLOR`, `UI_CONTROL_FILE_PICKER`, `UI_CONTROL_ICON_BUTTON`, or `UI_CONTROL_DROPDOWN`. Bind values with
+callbacks or directly to a config var.
 
 ```cpp
 UiControlDesc control = UI_CONTROL_DESC_INIT;
@@ -862,17 +863,31 @@ control.label = "Enable rainbows";
 control.help_rml = "Shown in the help pane while focused.";
 control.binding = UI_BINDING_CONFIG_VAR;
 control.config_var = myBoolVar;  // from svc_config->register_var
-svc_ui->pane_add_control(mod_ctx, leftPane, &control, nullptr);
+svc_ui->pane_add_control(mod_ctx, pane, &control, nullptr);
+
+UiRowDesc rowDesc = UI_ROW_DESC_INIT;
+rowDesc.align = UI_ROW_ALIGN_CENTER;
+UiElementHandle row = 0;
+svc_ui->pane_add_row(mod_ctx, pane, &rowDesc, &row);
+
+UiControlDesc play = UI_CONTROL_DESC_INIT;
+play.kind = UI_CONTROL_ICON_BUTTON;
+play.icon = "play_arrow";
+play.label = "Play";
+play.on_pressed = play_track;
+svc_ui->pane_add_control(mod_ctx, row, &play, nullptr);
 ```
 
 `UI_BINDING_CONFIG_VAR` wires persistence, change notifications, and the modified indicator automatically. The var
-type must match the control: `TOGGLE` = bool, `NUMBER` and `SELECT` = int, `STRING` and `COLOR` = string. Float vars
-are not bindable; use callbacks and convert. `help_rml` and `SELECT` option lists render in a help pane, so `SELECT`
-controls are only available inside window tabs.
+type must match the control: `TOGGLE` = bool, `NUMBER`, `SELECT`, and `DROPDOWN` = int, `STRING`, `COLOR`, and
+`FILE_PICKER` = string. Float vars are not bindable; use callbacks and convert. `help_rml` and `SELECT` option lists
+render in a help pane, so `SELECT` controls are only available inside window tabs.
 
 `pane_add_group` adds a category button to a window tab's left pane. Focusing the button clears the paired right pane
 and calls the group's build callback with that pane, which is useful for organizing related controls without adding
 more tabs.
+
+`pane_add_row` adds a horizontal container that other controls may be nested inside.
 
 **Lists:** `pane_add_list` adds a scrollable virtualized list of items that can be efficiently updated and filtered.
 Keys must be unique and remain stable across replacements.
@@ -1043,6 +1058,13 @@ Inside a stage callback, record work with `push_draw`, stream per-frame data wit
 for temporary offscreen passes. Draw callbacks run later on the render worker thread with the live
 `WGPURenderPassEncoder`; they may use only their `GfxDrawContext` handles and raw `wgpu*` calls. Compute callbacks
 registered with `register_compute_type` follow the same worker-thread rule and run on the frame command encoder.
+
+**GfxService 1.3**: set `GfxResolveDesc.normal` to request a view-space normal snapshot. The first request enables the
+normal attachment for the next frame, then stays enabled until quit. Normal snapshots are unavailable in WebGPU
+compatibility mode or offscreen passes.
+
+Scene attachment changes alter `GfxDrawContext.layout.key`. Create scene pipelines from the draw callback's layout
+and rebuild lazily when its key changes. See the included demo gfx mods for examples.
 
 All WGPU handles from the service are borrowed. Resolved target views are valid for the current frame only. GPU objects
 created by a mod are owned by that mod and should be released in `mod_shutdown`.
@@ -1371,12 +1393,16 @@ HookshotHit::g_orig(link, atObjInf, target, tgObjInf);  // call through to the o
 
 Class member functions must include `Class*` as the first argument.
 
-Two spellings work on every platform:
+There are three ways to refer to a function by symbol:
 
-- **Display names** (`daAlink_c::posMove`, `fapGm_Before`): the qualified name with no parameter list. They carry no
-  signature, so overload sets (and file-local statics sharing a name) return `MOD_CONFLICT`.
-- **Decorated names** (`_ZN9daAlink_c7posMoveEv` / `?posMove@daAlink_c@@...`): the platform's mangled spelling in
-  dlsym convention (no Mach-O leading underscore). The escape hatch for overloads.
+- **Display names** (`daAlink_c::posMove`, `fapGm_Before`): the qualified name with no parameter list. Since they have
+  no signature, overloads (and file-local statics sharing a name) return `MOD_CONFLICT`.
+- **Decorated names** (`_ZN9daAlink_c7posMoveEv` / `?posMove@daAlink_c@@...`): the platform's mangled name, like you'd
+  pass to dlsym(). Useful for overloads, but must be specified separately for Windows (`#ifdef _MSVC_LANG`) and other
+  platforms.
+- **Translation unit aliases** (`src/d/actor/d_a_b_gnd.cpp#action`): the source path relative to the repository root,
+  followed by `#` and then the function display name without parameters. This allows disambiguating static functions
+  with the same name across different source files.
 
 Installing fails with `MOD_UNAVAILABLE` when it didn't resolve (missing, ambiguous, or no symbol manifest). Unlike
 `DEFINE_HOOK`, the signature is **not** compiler-checked: a mismatched signature will corrupt the

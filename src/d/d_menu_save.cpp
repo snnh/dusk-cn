@@ -22,7 +22,8 @@
 #include "m_Do/m_Do_graphic.h"
 
 #if TARGET_PC
-#include "dusk/interp/frame_interpolation.h"
+#include "dusk/game_clock.h"
+#include "dusk/interp/user_interface.h"
 #include "dusk/menu_pointer.h"
 #include "dusk/mods/svc/save.hpp"
 #include "dusk/settings.h"
@@ -101,6 +102,8 @@ dMenu_save_c::dMenu_save_c() {
         mFileInfo[i] = NULL;
     }
     mpSelectMoveBase = NULL;
+
+    IF_DUSK(mYesNoSelAnmCol = 0);
 
     for (int i = 0; i < 2; i++) {
         mpNoYes[i] = NULL;
@@ -809,9 +812,7 @@ void dMenu_save_c::_move() {
         }
 
         (this->*MenuSaveProc[mMenuProc])();
-#if !TARGET_PC
-        saveSelAnm();
-#endif
+        IF_NOT_DUSK(saveSelAnm());
 
         if (mWarning != NULL) {
             mWarning->_move();
@@ -828,7 +829,10 @@ void dMenu_save_c::saveSelAnm() {
 }
 
 void dMenu_save_c::selFileWakuAnm() {
-    IF_DUSK_BLOCK(dusk::interp::get_ui_tick_pending())
+#if TARGET_PC
+    dusk::vdt::present_looping(mFileWakuAnmFrame, mpFileWakuAnm, 2.0f);
+    dusk::vdt::present_looping(mFileWakuRotAnmFrame, mpFileWakuRotAnm, 2.0f);
+#else
     mFileWakuAnmFrame += 2;
     if (mFileWakuAnmFrame >= mpFileWakuAnm->getFrameMax()) {
         mFileWakuAnmFrame -= mpFileWakuAnm->getFrameMax();
@@ -838,13 +842,17 @@ void dMenu_save_c::selFileWakuAnm() {
     if (mFileWakuRotAnmFrame >= mpFileWakuRotAnm->getFrameMax()) {
         mFileWakuRotAnmFrame -= mpFileWakuRotAnm->getFrameMax();
     }
-    IF_DUSK_BLOCK_END
     mpFileWakuAnm->setFrame(mFileWakuAnmFrame);
     mpFileWakuRotAnm->setFrame(mFileWakuRotAnmFrame);
+#endif
 }
 
 void dMenu_save_c::bookIconAnm() {
-    IF_DUSK_BLOCK(dusk::interp::get_ui_tick_pending())
+#if TARGET_PC
+    dusk::vdt::present_looping(field_0x154, field_0x150, 2.0f);
+    dusk::vdt::present_looping(field_0x15c, field_0x158, 2.0f);
+    dusk::vdt::present_looping(field_0x164, field_0x160, 2.0f);
+#else
     field_0x154 += 2;
     if (field_0x154 >= field_0x150->getFrameMax()) {
         field_0x154 -= field_0x150->getFrameMax();
@@ -859,10 +867,10 @@ void dMenu_save_c::bookIconAnm() {
     if (field_0x164 >= field_0x160->getFrameMax()) {
         field_0x164 -= field_0x160->getFrameMax();
     }
-    IF_DUSK_BLOCK_END
     field_0x150->setFrame(field_0x154);
     field_0x158->setFrame(field_0x15c);
     field_0x160->setFrame(field_0x164);
+#endif
 }
 
 void dMenu_save_c::memCardWatch() {
@@ -1448,9 +1456,8 @@ void dMenu_save_c::memCardDataSaveWait() {
     if (mCmdState != 0) {
 #if TARGET_PC
         if (mCmdState == 1) {
-                dusk::mods::svc::save_slot_written(
-                    mSelectedFile, mSaveBuffer + mSelectedFile * QUEST_LOG_SIZE);
-            }
+            dusk::mods::svc::save_slot_written(mSelectedFile);
+        }
 #endif
         printf("save cmdState %d\n", mCmdState);
         mMenuProc = PROC_MEMCARD_DATA_SAVE_WAIT2;
@@ -1836,6 +1843,7 @@ void dMenu_save_c::openSaveSelect3() {
         var_r29 = ketteiTxtDispAnm();
 
         if (field_0x74[mSelectedFile] != SelEndFrameTbl[mSelectedFile]) {
+#if !TARGET_PC
             field_0x74[mSelectedFile] += 2;
 
             if (field_0x74[mSelectedFile] > SelEndFrameTbl[mSelectedFile]) {
@@ -1844,6 +1852,7 @@ void dMenu_save_c::openSaveSelect3() {
 
             field_0x40->setFrame(field_0x74[mSelectedFile]);
             mpSelData[mSelectedFile]->getPanePtr()->animationTransform();
+#endif
             var_r28 = false;
         }
     }
@@ -2051,6 +2060,7 @@ void dMenu_save_c::saveSelectMoveAnime() {
         selWakuAnmComplete = selectWakuAlpahAnm(mLastSelFile);
 
         if (field_0x74[mLastSelFile] != SelStartFrameTbl[mLastSelFile]) {
+#if !TARGET_PC
             field_0x74[mLastSelFile] -= 2;
 
             if (field_0x74[mLastSelFile] < SelStartFrameTbl[mLastSelFile]) {
@@ -2059,6 +2069,7 @@ void dMenu_save_c::saveSelectMoveAnime() {
 
             field_0x44->setFrame(field_0x74[mLastSelFile]);
             mpSelData[mLastSelFile]->getPanePtr()->animationTransform();
+#endif
             var_r29 = false;
         }
     }
@@ -2069,6 +2080,7 @@ void dMenu_save_c::saveSelectMoveAnime() {
         var_r28 = mpBookWaku[mSelectedFile]->alphaAnime(g_msHIO.mEffectDispFrames, 0, 0xFF, 1);
 
         if (field_0x74[mSelectedFile] != SelEndFrameTbl[mSelectedFile]) {
+#if !TARGET_PC
             field_0x74[mSelectedFile] += 2;
 
             if (field_0x74[mSelectedFile] > SelEndFrameTbl[mSelectedFile]) {
@@ -2077,6 +2089,7 @@ void dMenu_save_c::saveSelectMoveAnime() {
 
             field_0x40->setFrame(field_0x74[mSelectedFile]);
             mpSelData[mSelectedFile]->getPanePtr()->animationTransform();
+#endif
             var_r27 = false;
         }
     }
@@ -2191,6 +2204,8 @@ void dMenu_save_c::saveMoveDisp2() {
 }
 
 void dMenu_save_c::yesnoSelectAnmSet(u8 param_0) {
+    IF_DUSK(mYesNoSelAnmCol = param_0);
+
     if (mYesNoPrevCursor != 0xFF) {
         yesnoWakuAlpahAnmInit(mYesNoPrevCursor, 255, 0, g_msHIO.mSelectFrames);
         mpNoYes[mYesNoPrevCursor]->getPanePtr()->setAnimation(field_0x40);
@@ -2528,6 +2543,7 @@ void dMenu_save_c::selectDataBaseMoveAnmInitSet(int param_0, int param_1) {
 
 bool dMenu_save_c::selectDataBaseMoveAnm() {
     if (mDataBaseMoveAnmFrame != mDataBaseMoveFrameMax) {
+#if !TARGET_PC
         if (mDataBaseMoveAnmFrame < mDataBaseMoveFrameMax) {
             mDataBaseMoveAnmFrame += 2;
 
@@ -2544,6 +2560,7 @@ bool dMenu_save_c::selectDataBaseMoveAnm() {
 
         field_0x40->setFrame(mDataBaseMoveAnmFrame);
         mpSelectMoveBase->getPanePtr()->animationTransform();
+#endif
         return false;
     } else {
 #if TARGET_PC
@@ -2607,6 +2624,7 @@ void dMenu_save_c::selectDataMoveAnmInitSet(int param_0, int param_1) {
 
 bool dMenu_save_c::selectDataMoveAnm() {
     if (field_0x74[mSelectedFile] != field_0x80) {
+#if !TARGET_PC
         if (field_0x74[mSelectedFile] < field_0x80) {
             field_0x74[mSelectedFile] += 2;
 
@@ -2625,6 +2643,7 @@ bool dMenu_save_c::selectDataMoveAnm() {
         for (int i = 0; i < 3; i++) {
             mpSelData[i]->getPanePtr()->animationTransform();
         }
+#endif
 
         return false;
     } else {
@@ -2662,6 +2681,7 @@ void dMenu_save_c::yesnoMenuMoveAnmInitSet(int anmFrame, int frameMax, u8 param_
 
 bool dMenu_save_c::yesnoMenuMoveAnm() {
     if (mYesNoMoveAnmFrame != mYesNoMoveAnmMax) {
+#if !TARGET_PC
         if (mYesNoMoveAnmFrame < mYesNoMoveAnmMax) {
             mYesNoMoveAnmFrame += 2;
 
@@ -2679,6 +2699,7 @@ bool dMenu_save_c::yesnoMenuMoveAnm() {
         field_0x48->setFrame(mYesNoMoveAnmFrame);
         mpNoYes[0]->getPanePtr()->animationTransform();
         mpNoYes[1]->getPanePtr()->animationTransform();
+#endif
         return false;
     } else {
         mpNoYes[0]->getPanePtr()->setAnimation((J2DAnmTransformKey*)NULL);
@@ -2713,6 +2734,7 @@ bool dMenu_save_c::yesnoSelectMoveAnm(u8 param_0) {
     bool var_r30 = true;
     if (mYesNoPrevCursor != 0xFF) {
         if (field_0x8c[mYesNoPrevCursor] != YnSelStartFrameTbl[mYesNoPrevCursor][param_0]) {
+#if !TARGET_PC
             if (field_0x8c[mYesNoPrevCursor] < YnSelStartFrameTbl[mYesNoPrevCursor][param_0]) {
                 field_0x8c[mYesNoPrevCursor] += 2;
 
@@ -2729,6 +2751,7 @@ bool dMenu_save_c::yesnoSelectMoveAnm(u8 param_0) {
 
             field_0x40->setFrame(field_0x8c[mYesNoPrevCursor]);
             mpNoYes[mYesNoPrevCursor]->getPanePtr()->animationTransform();
+#endif
             var_r30 = false;
         }
     }
@@ -2736,6 +2759,7 @@ bool dMenu_save_c::yesnoSelectMoveAnm(u8 param_0) {
     bool var_r7 = true;
     if (mYesNoCursor != 0xFF) {
         if (field_0x8c[mYesNoCursor] != YnSelEndFrameTbl[mYesNoCursor][param_0]) {
+#if !TARGET_PC
             if (field_0x8c[mYesNoCursor] < YnSelEndFrameTbl[mYesNoCursor][param_0]) {
                 field_0x8c[mYesNoCursor] += 2;
 
@@ -2752,6 +2776,7 @@ bool dMenu_save_c::yesnoSelectMoveAnm(u8 param_0) {
 
             field_0x44->setFrame(field_0x8c[mYesNoCursor]);
             mpNoYes[mYesNoCursor]->getPanePtr()->animationTransform();
+#endif
             var_r7 = false;
         }
     }
@@ -2798,6 +2823,7 @@ void dMenu_save_c::errorMoveAnmInitSet(int param_0, int param_1) {
 
 bool dMenu_save_c::errorMoveAnm() {
     if (field_0xb8 != field_0xbc) {
+#if !TARGET_PC
         if (field_0xb8 < field_0xbc) {
             field_0xb8 += 2;
 
@@ -2814,6 +2840,7 @@ bool dMenu_save_c::errorMoveAnm() {
 
         field_0x4c->setFrame(field_0xb8);
         field_0xb4->animationTransform();
+#endif
         return 0;
     } else {
         field_0x4c->setFrame(field_0xbc);
@@ -3072,22 +3099,85 @@ void dMenu_save_c::menuSaveWide() {
     }
     #endif
 }
+
+void dMenu_save_c::presentLayoutAnims() {
+    if (mWarning != NULL) {
+        mWarning->presentAnims();
+    }
+
+    dusk::vdt::present_toward(mDataBaseMoveAnmFrame, (f32)mDataBaseMoveFrameMax, field_0x40, mpSelectMoveBase != NULL ? mpSelectMoveBase->getPanePtr() : NULL);
+
+    bool sharedSel = true;
+    for (int i = 0; i < 3; i++) {
+        J2DPane* pane = mpSelData[i] != NULL ? mpSelData[i]->getPanePtr() : NULL;
+        if (pane == NULL || pane->mTransform != field_0x40) {
+            sharedSel = false;
+            break;
+        }
+    }
+    if (sharedSel && mSelectedFile != 0xFF) {
+        dusk::vdt::present_toward(field_0x74[mSelectedFile], (f32)field_0x80, field_0x40);
+        for (int i = 0; i < 3; i++) {
+            mpSelData[i]->getPanePtr()->animationTransform();
+        }
+    } else {
+        for (int i = 0; i < 3; i++) {
+            J2DPane* pane = mpSelData[i] != NULL ? mpSelData[i]->getPanePtr() : NULL;
+            dusk::vdt::present_selected(field_0x74[i], pane, field_0x40, (f32)SelEndFrameTbl[i],
+                                        field_0x44, (f32)SelStartFrameTbl[i]);
+        }
+    }
+
+    if (mYesNoMoveAnmFrame != mYesNoMoveAnmMax) {
+        dusk::vdt::present_shared(mYesNoMoveAnmFrame, (f32)mYesNoMoveAnmMax, field_0x48,
+                                  {mpNoYes[0] != NULL ? mpNoYes[0]->getPanePtr() : NULL,
+                                   mpNoYes[1] != NULL ? mpNoYes[1]->getPanePtr() : NULL});
+    }
+
+    for (int i = 0; i < 2; i++) {
+        J2DPane* pane = mpNoYes[i] != NULL ? mpNoYes[i]->getPanePtr() : NULL;
+        dusk::vdt::present_selected(field_0x8c[i], pane, field_0x40, (f32)YnSelStartFrameTbl[i][mYesNoSelAnmCol],
+                                    field_0x44, (f32)YnSelEndFrameTbl[i][mYesNoSelAnmCol]);
+    }
+
+    dusk::vdt::present_toward(field_0xb8, (f32)field_0xbc, field_0x4c, field_0xb4);
+
+    for (int i = 0; i < 3; ++i) {
+        mpBookWaku[i]->presentAnime();
+        mpSelWakuMoyo[i]->presentAnime();
+        mpSelWakuGold[i]->presentAnime();
+        mpSelWakuGold2[i]->presentAnime();
+    }
+    for (int i = 0; i < 2; ++i) {
+        mNoYesBase[i]->presentAnime();
+        mNoYesGold[i]->presentAnime();
+        mNoYesGold2[i]->presentAnime();
+        mpNoYesTxt[i]->presentAnime();
+        mpErrTxtPane[i]->presentAlphaAnime();
+        mpHeaderTxtPane[i]->presentAlphaAnime();
+    }
+    mpBBtnIcon->presentAlphaAnime();
+    mpABtnIcon->presentAlphaAnime();
+    mpBackTxt->presentAlphaAnime();
+    mpConfirmTxt->presentAlphaAnime();
+}
 #endif
 
 void dMenu_save_c::_draw2() {
-    if (field_0x21a1 == 0) {
 #if TARGET_PC
+    if (mDisplayMenu && dusk::game_clock::is_presentation_frame()) {
         saveSelAnm();
+        presentLayoutAnims();
+        menuSaveWide();
+    }
 #endif
+
+    if (field_0x21a1 == 0) {
         if (mpScrnExplain != NULL) {
             dComIfGd_set2DOpa(&mMenuSaveExplain);
         }
 
         if (mDisplayMenu) {
-            #if TARGET_PC
-            menuSaveWide();
-            #endif
-
             dComIfGd_set2DOpa(&mSaveSel);
 
             for (int i = 0; i < 3; i++) {

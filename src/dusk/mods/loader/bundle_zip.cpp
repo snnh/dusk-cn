@@ -22,4 +22,12 @@ size_t ModBundleZip::getFileSize(const std::string& fileName) {
     return m_archive.file_size(fileName);
 }
 
+bool ModBundleZip::file_exists(const std::string& fileName) {
+    return m_archive.file_exists(fileName);
+}
+
+bool ModBundleZip::directory_exists(const std::string& fileName) {
+    return m_archive.directory_exists(fileName);
+}
+
 }  // namespace dusk::mods

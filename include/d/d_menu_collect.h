@@ -194,6 +194,9 @@ public:
     /* 0x25F */ u8 field_0x25f;
     /* 0x260 */ u8 field_0x260;
     /* 0x261 */ u8 field_0x261;
+#if TARGET_PC
+    f32 mBackAlpha = 0.0f;
+#endif
 };
 
 class dMenu_Collect3D_c {

@@ -17,7 +17,11 @@ public:
     void setSight(cXyz const*, int);
 
     virtual void draw();
+#if TARGET_PC
+    virtual ~daBoomerang_sight_c();
+#else
     virtual ~daBoomerang_sight_c() {}
+#endif
 
     u8 getReserve() const { return mReserve; }
     u8 getAlpha(int i_index) { return m_alpha[i_index]; }

@@ -1,8 +1,11 @@
 #include "dusk/interp/frame_interpolation.h"
 
 #include "dusk/game_clock.h"
-#include "dusk/interp/dual_buffer.h"
 #include "dusk/interp/lerp.h"
+#include "dusk/interp/material.h"
+#include "dusk/interp/particle.h"
+#include "dusk/interp/samples.h"
+#include "dusk/interp/vertex.h"
 
 #include "mtx.h"
 
@@ -16,6 +19,7 @@ void camera_on_begin_record();
 bool camera_apply_presentation();
 void camera_restore_presentation();
 void camera_invalidate_snapshots();
+void clear_weather_samples();
 }  // namespace dusk::interp
 
 namespace {
@@ -29,7 +33,6 @@ bool s_replacementsActive = false;
 bool s_syncPresentation = false;
 
 float s_step = 0.0f;
-bool s_uiTickPending = false;
 uint64_t s_simTickSeq = 0;
 uint64_t s_observedPresentationEpoch = 0;
 
@@ -39,6 +42,7 @@ Recording s_previousRecording;
 absl::flat_hash_map<uintptr_t, Mtx> g_replacements;
 
 int s_presentationDepth = 0;
+bool s_cameraPresentationActive = false;
 
 const Mtx* resolve_replacement(const Mtx* source, Mtx* scratch) {
     if (!s_replacementsActive || source == nullptr || dusk::interp::presentation_sync_active()) {
@@ -81,6 +85,7 @@ void interpolate_replacements() {
 struct InterpolationCallBackWork {
     dusk::interp::InterpolationCallBack pCallBack;
     void* pUserWork;
+    std::shared_ptr<void> owner;
 };
 
 std::vector<InterpolationCallBackWork> s_interpolationCallBackWork;
@@ -104,10 +109,15 @@ void clear_interpolation_history() {
     s_previousRecording = {};
     s_currentRecording = {};
     clear_replacements();
-    dusk::interp::clear_owned_buffers();
     clear_callbacks();
     dusk::interp::camera_invalidate_snapshots();
+    dusk::interp::clear_owned_samples();
+    dusk::interp::clear_weather_samples();
+    dusk::interp::material::clear();
+    dusk::interp::particle::clear();
+    dusk::interp::vertex::clear();
     s_presentationDepth = 0;
+    s_cameraPresentationActive = false;
 }
 
 }  // namespace
@@ -122,6 +132,9 @@ void begin_sim_tick() {
     clear_callbacks();
     camera_on_sim_tick();
     ++s_simTickSeq;
+    material::prune();
+    particle::prune();
+    vertex::prune();
 }
 
 uint64_t sim_tick_seq() {
@@ -186,17 +199,6 @@ float get_interpolation_step() {
     return presentation_sync_active() ? 1.0f : s_step;
 }
 
-void set_ui_tick_pending(bool value) {
-    if (s_uiTickPending == value) {
-        return;
-    }
-    s_uiTickPending = value;
-}
-
-bool get_ui_tick_pending() {
-    return is_enabled() ? s_uiTickPending : true;
-}
-
 void record_final_mtx(Mtx m, const void* key) {
     if (!s_recording || m == nullptr) {
         return;
@@ -208,6 +210,13 @@ void record_final_mtx(Mtx m, const void* key) {
 
 void record_final_mtx(Mtx m) {
     record_final_mtx(m, m);
+}
+
+void forget_mtx(const void* key) {
+    const auto address = reinterpret_cast<uintptr_t>(key);
+    s_previousRecording.matrix_values.erase(address);
+    s_currentRecording.matrix_values.erase(address);
+    g_replacements.erase(address);
 }
 
 bool lookup_replacement(const void* key, Mtx out) {
@@ -255,12 +264,11 @@ void begin_presentation(float step) {
         s_presentationDepth++;
         return;
     }
-    if (!camera_apply_presentation()) {
-        return;
-    }
-
     s_presentationDepth = 1;
-    callbacks_run();
+    s_cameraPresentationActive = camera_apply_presentation();
+    if (s_cameraPresentationActive) {
+        callbacks_run();
+    }
 }
 
 void end_presentation() {
@@ -272,7 +280,10 @@ void end_presentation() {
         return;
     }
 
-    camera_restore_presentation();
+    if (s_cameraPresentationActive) {
+        camera_restore_presentation();
+        s_cameraPresentationActive = false;
+    }
 }
 
 bool is_presentation_active() {
@@ -288,6 +299,14 @@ void add_interpolation_callback(InterpolationCallBack pCallBack, void* pUserWork
     }
 
     s_interpolationCallBackWork.push_back({pCallBack, pUserWork});
+}
+
+void add_interpolation_callback(InterpolationCallBack pCallBack, void* pUserWork,
+                                std::shared_ptr<void> owner) {
+    if (!should_capture() || is_presentation_active() || pCallBack == nullptr) {
+        return;
+    }
+    s_interpolationCallBackWork.push_back({pCallBack, pUserWork, std::move(owner)});
 }
 
 }  // namespace dusk::interp

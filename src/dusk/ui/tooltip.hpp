@@ -12,6 +12,7 @@ public:
     Tooltip(const Tooltip&) = delete;
     Tooltip& operator=(const Tooltip&) = delete;
 
+    void set_label(const Rml::String& label);
     void update();
 
 private:

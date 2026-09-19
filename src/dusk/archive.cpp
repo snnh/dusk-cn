@@ -42,8 +42,7 @@ struct ZipArchive::Impl {
         }
     }
 
-    static size_t read_zip(
-        void* opaque, mz_uint64 offset, void* buffer, const size_t size) {
+    static size_t read_zip(void* opaque, mz_uint64 offset, void* buffer, const size_t size) {
         auto& archive = *static_cast<Impl*>(opaque);
         std::error_code error;
         return archive.file.read_at(offset, {static_cast<std::byte*>(buffer), size}, error);
@@ -127,19 +126,50 @@ std::vector<std::string> ZipArchive::file_names() {
     return results;
 }
 
-size_t ZipArchive::file_size(const std::string_view name) {
-    std::lock_guard lock{m_impl->mutex};
+std::optional<mz_zip_archive_file_stat> stat_zip_entry(
+    mz_zip_archive* pZip, std::string_view name) {
     const std::string fileName{name};
-    const auto index = mz_zip_reader_locate_file(&m_impl->zip, fileName.c_str(), nullptr, 0);
-    if (index < 0) {
+    uint32_t fileIdx;
+    if (!mz_zip_reader_locate_file_v2(pZip, fileName.c_str(), nullptr, 0, &fileIdx)) {
+        return std::nullopt;
+    }
+
+    mz_zip_archive_file_stat stat;
+    if (!mz_zip_reader_file_stat(pZip, fileIdx, &stat)) {
+        return std::nullopt;
+    }
+
+    return stat;
+}
+
+bool ZipArchive::file_exists(const std::string& name) const {
+    std::lock_guard lock{m_impl->mutex};
+    auto result = stat_zip_entry(&m_impl->zip, name);
+    if (!result.has_value()) {
+        return false;
+    }
+
+    return !result->m_is_directory;
+}
+
+bool ZipArchive::directory_exists(const std::string& name) const {
+    std::lock_guard lock{m_impl->mutex};
+    auto result = stat_zip_entry(&m_impl->zip, name);
+    if (!result.has_value()) {
+        return false;
+    }
+
+    return result->m_is_directory;
+}
+
+size_t ZipArchive::file_size(const std::string& name) {
+    std::lock_guard lock{m_impl->mutex};
+    auto stat = stat_zip_entry(&m_impl->zip, name);
+    if (!stat.has_value()) {
         throw std::runtime_error(fmt::format("Unable to locate file in ZIP: {}", name));
     }
 
-    mz_zip_archive_file_stat stat{};
-    if (!mz_zip_reader_file_stat(&m_impl->zip, static_cast<mz_uint>(index), &stat)) {
-        throw std::runtime_error(fmt::format("Unable to inspect file in ZIP: {}", name));
-    }
-    return static_cast<size_t>(stat.m_uncomp_size);
+    return static_cast<size_t>(stat->m_uncomp_size);
 }
 
 }  // namespace dusk::archive

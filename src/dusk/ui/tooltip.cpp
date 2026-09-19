@@ -28,6 +28,10 @@ Tooltip::~Tooltip() {
     mRoot->GetParentNode()->RemoveChild(mRoot);
 }
 
+void Tooltip::set_label(const Rml::String& label) {
+    set_text_content(mRoot, label);
+}
+
 void Tooltip::update() {
     auto* context = mAnchor->GetContext();
     const bool active = mFollowsFocus ? mAnchor->Contains(context->GetFocusElement()) :

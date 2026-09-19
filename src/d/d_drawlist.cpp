@@ -19,12 +19,13 @@
 #include "dusk/logging.h"
 #include "helpers/gx_helper.h"
 
+#include "d/d_menu_collect.h"
+
 #include "JSystem/JKernel/JKRHeap.h"
 
 #include <absl/container/flat_hash_map.h>
 #include <tracy/Tracy.hpp>
 
-#include <cstdio>
 #include <typeindex>
 
 static const void* getInterpKey(const void* base, int idx) {
@@ -1939,6 +1940,7 @@ dDlst_list_c::~dDlst_list_c() {
 }
 
 void dDlst_list_c::reset() {
+    IF_DUSK(dMenu_Collect3D_c::setViewPortOffsetY(-100.0f));
     J3DDrawBuffer** buffer = mDrawBuffers;
     for (int i = 0; i < 21; i++) {
         J3DDrawBuffer* tmp = *buffer;
@@ -2074,7 +2076,7 @@ void dDlst_list_c::wipeIn(f32 i_wipeSpeed) {
 
 void dDlst_list_c::calcWipe() {
     if (mWipe) {
-        mWipeRate += mWipeSpeed;
+        mWipeRate += mWipeSpeed IF_DUSK(* dusk::game_clock::original_frames());
         if (mWipeRate < 0.0f) {
             mWipeRate = 0.0f;
         } else if (mWipeRate > 1.0f) {

@@ -15,6 +15,7 @@
 #include <cstring>
 
 #if TARGET_PC
+#include "dusk/game_clock.h"
 #include "helpers/gx_helper.h"
 #endif
 
@@ -192,6 +193,9 @@ int dGameover_c::_create() {
     }
 
     (this->*init_process[mProc])();
+
+    IF_DUSK(base.draw_interp_frame = true);
+
     return cPhs_COMPLEATE_e;
 
     return phase;
@@ -335,9 +339,11 @@ void dGameover_c::deleteWait_init() {}
 void dGameover_c::deleteWait_proc() {}
 
 int dGameover_c::_draw() {
+    IF_DUSK_BLOCK(dusk::game_clock::is_sim_frame() && (mIsDemoSave && mProc >= PROC_DISP_WAIT))
     if (dgo_capture_c != NULL && dComIfGp_isPauseFlag()) {
         dComIfGd_set2DOpa(dgo_capture_c);
     }
+    IF_DUSK_BLOCK_END
 
     if (mIsDemoSave && mProc >= PROC_DISP_WAIT) {
         if (dgo_screen_c != NULL) {

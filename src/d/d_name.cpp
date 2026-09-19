@@ -12,6 +12,8 @@
 #include "f_op/f_op_msg_mng.h"
 
 #if TARGET_PC
+#include "dusk/game_clock.h"
+#include "dusk/interp/user_interface.h"
 #include "dusk/settings.h"
 #include "dusk/utilities.hpp"
 #include "dusk/version.hpp"
@@ -627,7 +629,7 @@ void dName_c::_move() {
     }
     #endif
 
-    cursorAnm();
+    IF_NOT_DUSK(cursorAnm());
 }
 
 int dName_c::nameCheck() {
@@ -682,6 +684,10 @@ void dName_c::playNameSet(int nameLength) {
 }
 
 void dName_c::cursorAnm() {
+#if TARGET_PC
+    dusk::vdt::present_looping(mCurColAnmF, mCursorColorKey, 2.0f);
+    dusk::vdt::present_looping(mCurTexAnmF, mCursorTexKey, 2.0f);
+#else
     mCurColAnmF += 2;
     if (mCurColAnmF >= mCursorColorKey->getFrameMax()) {
         mCurColAnmF -= mCursorColorKey->getFrameMax();
@@ -693,6 +699,7 @@ void dName_c::cursorAnm() {
         mCurTexAnmF -= mCursorTexKey->getFrameMax();
     }
     mCursorTexKey->setFrame(mCurTexAnmF);
+#endif
 
     nameIn.NameInScr->animation();
 }
@@ -1951,9 +1958,20 @@ void dName_c::nameWide() {
 #endif
 
 void dName_c::_draw() {
-    #if TARGET_PC
-    nameWide();
-    #endif
+#if TARGET_PC
+    if (dusk::game_clock::is_presentation_frame()) {
+        for (int i = 0; i < 65; ++i) {
+            mMojiIcon[i]->presentAnime();
+        }
+        for (int i = 0; i < 4; ++i) {
+            if (mMenuIcon[i] != NULL) {
+                mMenuIcon[i]->presentAnime();
+            }
+        }
+        cursorAnm();
+        nameWide();
+    }
+#endif
 
     dComIfGd_set2DOpa(&nameIn);
     dComIfGd_set2DOpa(mSelIcon);

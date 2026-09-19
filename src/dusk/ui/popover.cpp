@@ -9,6 +9,7 @@ const Rml::String kDocumentSource = R"RML(
 <rml>
 <head>
     <link type="text/rcss" href="res/rml/theme.rcss" />
+    <link type="text/rcss" href="res/rml/controls.rcss" />
     <link type="text/rcss" href="res/rml/popover.rcss" />
 </head>
 <body>
@@ -93,8 +94,11 @@ void Popover::update() {
     reposition();
 }
 
-void Popover::dismiss() {
+void Popover::dismiss(bool restoreFocus) {
     if (visible()) {
+        if (!restoreFocus) {
+            mAnchor = nullptr;
+        }
         hide(true);
     }
 }

@@ -20,7 +20,7 @@ private:
     /* 0x4 */ ResTIMG* mpRes;
 
 #if TARGET_PC
-    TGXTlutObj* mpTlutObj;
+    GXTlutObj* mpTlutObj;
     TGXTexObj* mpTexObj;
     u8** mpImgDataPtr;
     u8** mpTlutDataPtr;
@@ -31,22 +31,20 @@ public:
         J3D_ASSERT_NULLPTR(52, res != NULL || num == 0);
 #if TARGET_PC
         mpTexObj = new TGXTexObj[num];
-        mpTlutObj = new TGXTlutObj[num];
+        mpTlutObj = new GXTlutObj[num];
         mpImgDataPtr = new u8*[num];
         mpTlutDataPtr = new u8*[num];
         for (u16 i = 0; i < num; i++) {
             mpImgDataPtr[i] = (u8*)(&mpRes[i]) + mpRes[i].imageOffset;
             mpTlutDataPtr[i] = (u8*)(&mpRes[i]) + mpRes[i].paletteOffset;
-            initGXTexObj(i);
+            loadGXTexObj(i);
         }
 #endif
     }
 
     void loadGX(u16, GXTexMapID) const;
 #if TARGET_PC
-    void initGXTexObj(u16);
-    TGXTexObj* getTexObj(u16 i) const { return &mpTexObj[i]; }
-    TGXTlutObj* getTlutObj(u16 i) const { return &mpTlutObj[i]; }
+    void loadGXTexObj(u16);
 #endif
     void entryNum(u16);
     void addResTIMG(u16, ResTIMG const*);
@@ -79,7 +77,7 @@ public:
 #if TARGET_PC
         mpImgDataPtr[index] = ((u8*)&timg) + timg.imageOffset;
         mpTlutDataPtr[index] = ((u8*)&timg) + timg.paletteOffset;
-        initGXTexObj(index);
+        loadGXTexObj(index);
 #else
         mpRes[index].imageOffset = ((mpRes[index].imageOffset + (uintptr_t)&timg - (uintptr_t)(mpRes + index)));
         mpRes[index].paletteOffset = ((mpRes[index].paletteOffset + (uintptr_t)&timg - (uintptr_t)(mpRes + index)));

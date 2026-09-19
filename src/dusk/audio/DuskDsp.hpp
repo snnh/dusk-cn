@@ -10,7 +10,7 @@
 #include <cassert>
 
 namespace dusk::audio {
-    constexpr int SampleRate = 32000;
+    constexpr int SampleRate = 48000;
 
     enum class OutputChannel : u8 {
         // same as SDL channel layout for 7.1
@@ -24,6 +24,8 @@ namespace dusk::audio {
         SURROUND_RIGHT,
         OutputChannel_MAX
     };
+
+    struct BiquadCoeffs { float b1, b2, a1, a2; };
 
     /**
      * Data stored by DSP implementation for each DSP channel.
@@ -64,6 +66,9 @@ namespace dusk::audio {
         // low pass previous state
         f32 prev_lp_out;  // out[n-1]
         f32 prev_lp_in;   // in[n-1]
+
+        std::array<u16, 4> curBiquadCoefs;
+        BiquadCoeffs remappedBiquadCoefs;
 
         // biquad state
         f32 biq_in1; // in[n-1]

@@ -95,6 +95,10 @@ static bool InitSDL3Output() {
 }
 
 void dusk::audio::Initialize() {
+    // enable 48 kHz mode
+    // this will scale voice pitch and track tempo accordingly
+    JASDriver::setOutputRate(static_cast<JASOutputRate>(-1));
+
     InitSDL3Output();
     DspInit();
 
@@ -187,6 +191,67 @@ static void InterleaveOutputData(const OutputSubframe& data, std::span<f32> targ
     }
 }
 
+constexpr auto kExtChannels = 2;
+constexpr auto kExtSrcInSampleCount = DSP_SUBFRAME_SIZE * 2;
+constexpr auto kExtSrcOutSampleCount = DSP_SUBFRAME_SIZE * 3;
+
+// simple 3:2 resampler
+struct LinearResampler {
+    f32 prev = 0.0f;
+    int phase = 0;
+
+    void resample(std::span<const s16> in, std::span<f32> out, int skip = 1, int offset = 0) {
+        const auto inSize = in.size() / skip;
+        const auto outSize = out.size() / skip;
+        assert(inSize * 3 == outSize * 2);
+
+        int idx = -1;
+        int phi = phase;
+        int n = 0;
+
+        while (n < outSize) {
+            f32 s0 = (idx < 0) ? prev : in[idx * skip + offset] / 32768.0f;
+            f32 s1 = in[idx * skip + skip + offset] / 32768.0f;
+            f32 frac = phi * (1.0f / 3.0f);
+
+            out[n++ * skip + offset] = s0 + frac * (s1 - s0);
+
+            phi += 2;
+            if (phi >= 3) {
+                phi -= 3;
+                idx++;
+            }
+        }
+
+        prev = in[(inSize - 1) * skip + offset] / 32768.0f;
+        phase = phi;
+    }
+};
+
+static struct {
+    std::array<f32, kExtSrcOutSampleCount * kExtChannels> buf;
+    int available = 0;
+    LinearResampler leftSrc;
+    LinearResampler rightSrc;
+
+    bool hungry() const { return available <= 0; }
+
+    void feed(std::span<const s16> in) {
+        const auto out = std::span{buf};
+        leftSrc.resample(in, out, kExtChannels, 0);
+        rightSrc.resample(in, out, kExtChannels, 1);
+        available = buf.size();
+    }
+
+    std::span<const f32> drain_subframe() {
+        constexpr auto kDrainSize = DSP_SUBFRAME_SIZE * kExtChannels;
+        assert(available >= kDrainSize);
+        const auto rv = std::span{&buf[buf.size() - available], kDrainSize};
+        available -= kDrainSize;
+        return rv;
+    }
+} extResampler;
+
 int RenderAudioSubframe() {
     ZoneScoped;
     OutBuffer = {};
@@ -198,16 +263,19 @@ int RenderAudioSubframe() {
     InterleaveOutputData(OutBuffer, OutInterleaveBuffer);
 
     if (JASDriver::extMixCallback != nullptr && JASDriver::sMixMode == MIX_MODE_INTERLEAVE) {
-        // NOTE: In the real game, this gets called on the entire audio frame, rather than the subframe.
-        // That's probably more efficient, but I didn't wanna change the code to calculate the
-        // entire audio buffers at once.
-        // This is only used for the movie player, and it seems to work fine with the smaller calls.
-        const auto mixData = JASDriver::extMixCallback(DSP_SUBFRAME_SIZE);
-        if (mixData) {
+        if (extResampler.hungry()) {
+            const auto mixData = JASDriver::extMixCallback(kExtSrcInSampleCount);
+            if (mixData) {
+                extResampler.feed(std::span{mixData, kExtSrcInSampleCount * kExtChannels});
+            }
+        }
+
+        if (!extResampler.hungry()) {
+            const auto inBuf = extResampler.drain_subframe();
             for (int i = 0; i < DSP_SUBFRAME_SIZE; i++) {
                 const auto oi = i * OutChannelCount;
-                OutInterleaveBuffer[oi] += static_cast<f32>(mixData[i * 2]) / 32767.0f;
-                OutInterleaveBuffer[oi + 1] += static_cast<f32>(mixData[i * 2 + 1]) / 32767.0f;
+                OutInterleaveBuffer[oi]     += inBuf[i * kExtChannels];
+                OutInterleaveBuffer[oi + 1] += inBuf[i * kExtChannels + 1];
             }
         }
     }

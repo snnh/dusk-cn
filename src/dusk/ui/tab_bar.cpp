@@ -109,7 +109,7 @@ bool TabBar::focus() {
     return false;
 }
 
-void TabBar::add_tab(const Rml::String& title, TabCallback callback) {
+Button& TabBar::add_tab(const Rml::String& title, TabCallback callback) {
     const int index = static_cast<int>(mTabs.size());
     const bool selected = index == mProps.selectedTabIndex;
     if (selected && callback) {
@@ -138,6 +138,7 @@ void TabBar::add_tab(const Rml::String& title, TabCallback callback) {
         .button = std::move(button),
         .callback = std::move(callback),
     });
+    return *mTabs.back().button;
 }
 
 void TabBar::clear_tabs() {

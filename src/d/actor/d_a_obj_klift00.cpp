@@ -13,17 +13,10 @@
 #include "d/d_com_inf_game.h"
 
 #if TARGET_PC
-#include "dusk/interp/dual_buffer.h"
 #include "dusk/interp/frame_interpolation.h"
+#include "dusk/interp/samples.h"
 
-static const int CHAIN_INTERP_MAX = 64;
-
-namespace {
-struct KLiftInterp {
-    cXyz draw[CHAIN_INTERP_MAX];
-    dusk::interp::DualBuffer<cXyz, CHAIN_INTERP_MAX> chain{draw};
-};
-}  // namespace
+using KLiftInterp = dusk::interp::Samples<cXyz>;
 #endif
 
 struct daObjKLift00_HIO_c : public mDoHIO_entry_c {
@@ -153,7 +146,14 @@ cPhs_Step daObjKLift00_c::create1st() {
 
 static const int l_bmdidx[3] = {5, 6, 4};
 
-void daObjKLift00_c::setMtx() {
+void daObjKLift00_c::setMtx(IF_DUSK(bool presentation)) {
+#if TARGET_PC
+    const auto* samples = presentation ? &dusk::interp::get<KLiftInterp>(this) : nullptr;
+    const auto chainPosition = [&](int i) {
+        const cXyz& position = mChainPositions[i].mCurrentPos;
+        return samples != nullptr ? samples->read(i, position) : position;
+    };
+#endif
     Mtx nonFoundationChainRotationMatrix;
     mDoMtx_stack_c::transS(current.pos.x, current.pos.y, current.pos.z);
     mDoMtx_stack_c::YrotM(shape_angle.y);
@@ -161,13 +161,16 @@ void daObjKLift00_c::setMtx() {
     if(!getNoBaseDisp())
         mpChainBase->setBaseTRMtx(mDoMtx_stack_c::get());
 
+    IF_DUSK_BLOCK(!presentation)
     MTXCopy(mDoMtx_stack_c::get(), mCullMtx);
+    IF_DUSK_BLOCK_END
 
     s16 negativeHomeYAngle = -home.angle.y;
 
     // Compute rotation matrices to make the chains' rotation match their change in position
     for(int i = 0; i < mNumChainModels; i++) {
-        cXyz vectorToLowerChain =  mChainPositions[i + 1].mCurrentPos - mChainPositions[i].mCurrentPos;
+        cXyz vectorToLowerChain = DUSK_IF_ELSE(chainPosition(i + 1) - chainPosition(i),
+                                               mChainPositions[i + 1].mCurrentPos - mChainPositions[i].mCurrentPos);
         cXyz crossProductXAxis;
         VECCrossProduct(&cXyz::BaseZ, &vectorToLowerChain, &crossProductXAxis);
 
@@ -190,7 +193,7 @@ void daObjKLift00_c::setMtx() {
         }
 
         negativeHomeYAngle += static_cast<s16>(0x4000);
-        mDoMtx_stack_c::transS(mChainPositions[i].mCurrentPos);
+        mDoMtx_stack_c::transS(DUSK_IF_ELSE(chainPosition(i), mChainPositions[i].mCurrentPos));
         mDoMtx_stack_c::concat(nonFoundationChainRotationMatrix);
         mDoMtx_stack_c::ZrotM(negativeHomeYAngle);
 
@@ -199,7 +202,9 @@ void daObjKLift00_c::setMtx() {
     }
 
     Mtx foundationChainRotationMatrix;
-    cXyz vectorFromSecondLowestChainToFoundation = mChainPositions[mNumChainModels].mCurrentPos - mChainPositions[mNumChainModels - 1].mCurrentPos;
+    cXyz vectorFromSecondLowestChainToFoundation =
+        DUSK_IF_ELSE(chainPosition(mNumChainModels) - chainPosition(mNumChainModels - 1),
+                     mChainPositions[mNumChainModels].mCurrentPos - mChainPositions[mNumChainModels - 1].mCurrentPos);
     cXyz crossProduct;
     Vec inverseBaseY = {0.0f, -1.0f, 0.0f};
     if(!cM3d_IsZero(vectorFromSecondLowestChainToFoundation.getSquareMag())) {
@@ -220,12 +225,14 @@ void daObjKLift00_c::setMtx() {
         MTXIdentity(foundationChainRotationMatrix);
     }
 
-    mDoMtx_stack_c::transS(mChainPositions[mNumChainModels].mCurrentPos);
+    mDoMtx_stack_c::transS(DUSK_IF_ELSE(chainPosition(mNumChainModels), mChainPositions[mNumChainModels].mCurrentPos));
     mDoMtx_stack_c::concat(foundationChainRotationMatrix);
     mDoMtx_stack_c::YrotM(-negativeHomeYAngle);
     mpLiftPlatform->setBaseTRMtx(mDoMtx_stack_c::get());
     mDoMtx_stack_c::scaleM(scale.x, scale.y, scale.z);
+    IF_DUSK_BLOCK(!presentation)
     MTXCopy(mDoMtx_stack_c::get(), mNewBgMtx);
+    IF_DUSK_BLOCK_END
 }
 
 void daObjKLift00_c::rideActor(fopAc_ac_c* riding_actor) {
@@ -450,32 +457,16 @@ int daObjKLift00_c::Execute(Mtx** i_mtx) {
     return 1;
 }
 
-#if TARGET_PC
-static void klift00_interp_post(void* pUserWork) {
-    static_cast<daObjKLift00_c*>(pUserWork)->onInterpPresentation();
-}
-
-void daObjKLift00_c::onInterpPresentation() {
-    cXyz savedPositions[CHAIN_INTERP_MAX];
-
-    for (int i = 0; i < mNumChains; i++) {
-        savedPositions[i] = mChainPositions[i].mCurrentPos;
-    }
-
-    auto& interp = dusk::interp::get<KLiftInterp>(this);
-    for (int i = 0; i < mNumChains; i++) {
-        mChainPositions[i].mCurrentPos = interp.draw[i];
-    }
-
-    setMtx();
-
-    for (int i = 0; i < mNumChains; i++) {
-        mChainPositions[i].mCurrentPos = savedPositions[i];
-    }
-}
-#endif
-
 int daObjKLift00_c::Draw() {
+#if TARGET_PC
+    if (dusk::interp::is_presentation_active()) {
+        setMtx(true);
+    } else if (dusk::interp::should_capture()) {
+        dusk::interp::get<KLiftInterp>(this).capture(mNumChains, [&](int i) {
+            return mChainPositions[i].mCurrentPos;
+        });
+    }
+#endif
     g_env_light.settingTevStruct(16, &current.pos, &tevStr);
     g_env_light.setLightTevColorType_MAJI(mpLiftPlatform, &tevStr);
 
@@ -495,16 +486,6 @@ int daObjKLift00_c::Draw() {
     }
 
     dComIfGd_setList();
-
-#if TARGET_PC
-    if (dusk::interp::is_enabled() && mNumChains > 0 && mNumChains <= CHAIN_INTERP_MAX) {
-        cXyz curr[CHAIN_INTERP_MAX];
-        for (int i = 0; i < mNumChains; i++) {
-            curr[i] = mChainPositions[i].mCurrentPos;
-        }
-        dusk::interp::get<KLiftInterp>(this).chain.capture_and_schedule(curr, mNumChains, &klift00_interp_post, this);
-    }
-#endif
 
     return 1;
 }

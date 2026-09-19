@@ -757,7 +757,8 @@ bool resolve_symbol_checked(const char* symbol, bool requireCode, void** out, st
         why = fmt::format("symbol '{}' not found", symbol);
         return false;
     case manifest::ResolveStatus::Ambiguous:
-        why = fmt::format("'{}' maps to more than one address; use the mangled name", symbol);
+        why = fmt::format(
+            "'{}' maps to more than one address; use a qualified or mangled name", symbol);
         return false;
     }
     why = "unexpected resolve failure";

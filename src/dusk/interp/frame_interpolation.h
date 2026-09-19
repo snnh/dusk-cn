@@ -3,6 +3,7 @@
 #include <dolphin/mtx.h>
 
 #include <cstdint>
+#include <memory>
 
 #ifdef __cplusplus
 namespace dusk::interp {
@@ -21,12 +22,10 @@ bool is_enabled();
 
 bool should_capture();
 
-// TODO: These should be phased out as UI is progressively updated to use game_clock
-void set_ui_tick_pending(bool value);
-bool get_ui_tick_pending();
-
 void record_final_mtx(Mtx m, const void* key);
 void record_final_mtx(Mtx m);
+
+void forget_mtx(const void* key);
 
 bool lookup_replacement(const void* key, Mtx out);
 bool lookup_concat_replacement(const void* lhs, const void* rhs, Mtx out);
@@ -37,6 +36,7 @@ bool is_presentation_active();
 
 typedef void (*InterpolationCallBack)(void* pUserWork);
 void add_interpolation_callback(InterpolationCallBack pCallBack, void* pUserWork);
+void add_interpolation_callback(InterpolationCallBack pCallBack, void* pUserWork, std::shared_ptr<void> owner);
 
 }  // namespace dusk::interp
 #endif

@@ -1,23 +1,27 @@
 #include "mod_browser.hpp"
 
+#include <borealis/update.hpp>
 #include "bool_button.hpp"
 #include "button.hpp"
+#include "dropdown_button.hpp"
 #include "dusk/mod_loader.hpp"
 #include "dusk/mods/loader/packages.hpp"
 #include "dusk/mods/queue.hpp"
 #include "dusk/mods/svc/registry.hpp"
+#include "dusk/mods/updates.hpp"
 #include "fmt/format.h"
 #include "format.hpp"
 #include "icon_button.hpp"
+#include "mod_updates.hpp"
 #include "mods_window.hpp"
 #include "nav_group.hpp"
 #include "package_row.hpp"
-#include "queue_window.hpp"
 #include "remote_texture_provider.hpp"
 #include "string_button.hpp"
 
 #include <SDL3/SDL_misc.h>
 #include <borealis/http.hpp>
+#include <tracy/Tracy.hpp>
 
 #include <algorithm>
 #include <array>
@@ -31,15 +35,18 @@
 namespace dusk::ui {
 namespace {
 
+constexpr bool kEnableEndorsements = false;
+
 struct SortOption {
     mods::catalog::Sort value;
     std::string_view label;
 };
 
 constexpr std::array sortOptions{
+    SortOption{mods::catalog::Sort::Featured, "Featured"},
     SortOption{mods::catalog::Sort::Updated, "Recently updated"},
     SortOption{mods::catalog::Sort::Downloads, "Most downloaded"},
-    SortOption{mods::catalog::Sort::Endorsements, "Most endorsed"},
+    // SortOption{mods::catalog::Sort::Endorsements, "Most endorsed"},
     SortOption{mods::catalog::Sort::Newest, "Newest"},
     SortOption{mods::catalog::Sort::Name, "Name"},
 };
@@ -110,7 +117,7 @@ void set_image(Rml::Element* element, const mods::catalog::Image& image, uint32_
     if (!source.empty()) {
         source = remote_image_source(source, image.width, image.height);
         element->SetProperty(
-            "decorator", fmt::format(R"(image("{}" {} center center))", escape(source), fit));
+            "decorator", fmt::format(R"(image-effects("{}" {}))", escape(source), fit));
         element->SetClass("has-image", true);
     }
 }
@@ -130,6 +137,7 @@ void open_web_url(const std::string& url) {
 
 void set_icon_button_content(Button& button, std::string_view icon, const Rml::String& label) {
     clear_children(button.root());
+    button.root()->SetClass("with-icon", true);
     append_text(append(button.root(), "icon"), material_icon(icon));
     append_text_element(button.root(), "span", label);
 }
@@ -158,11 +166,11 @@ class ModBrowserDetail;
 class CatalogCard final : public Button {
 public:
     CatalogCard(Rml::Element* parent, const mods::catalog::Mod& mod, std::function<void()> onOpen)
-        : Button{parent, Props{}} {
+        : Button{parent, Props{}}, mId{mod.id}, mPackageSize{format_bytes(mod.packageSize)},
+          mNativeCodeBlocked{mod.containsNativeCode && !mods::catalog::supports_native_installs()} {
         mRoot->SetClass("catalog-card", true);
+        mRoot->SetAttribute("mod-id", mod.id);
         const auto category = mod.category ? mod.category->name : "Uncategorized";
-        const auto isInstalled = mods::ModLoader::instance().find_mod(mod.id) != nullptr;
-        const auto installedLabel = isInstalled ? "Installed" : format_bytes(mod.packageSize);
 
         auto* art = append(mRoot, "catalog-card-art");
         auto* artImage = append(art, "catalog-card-art-image");
@@ -180,14 +188,13 @@ public:
         auto* downloads = append(meta, "stat");
         append_text(append(downloads, "icon"), material_icon("download"));
         append_text_element(downloads, "span", format_count(mod.downloads));
-        auto* endorsements = append(meta, "stat");
-        append_text(append(endorsements, "icon"), material_icon("favorite"));
-        append_text_element(endorsements, "span", format_count(mod.endorsements));
-        auto* size = append_text_element(meta, "small", installedLabel);
-        size->SetClass("size", true);
-        if (isInstalled) {
-            size->SetClass("installed", true);
+        if constexpr (kEnableEndorsements) {
+            auto* endorsements = append(meta, "stat");
+            append_text(append(endorsements, "icon"), material_icon("favorite"));
+            append_text_element(endorsements, "span", format_count(mod.endorsements));
         }
+        mStatus = append(meta, "small");
+        mStatus->SetClass("size", true);
 
         if (mod.banner) {
             set_image(artImage, *mod.banner, 640);
@@ -198,7 +205,32 @@ public:
             set_image(iconImage, *mod.icon, 128);
         }
         on_pressed(std::move(onOpen));
+        update();
     }
+
+    void update() override {
+        const bool installed = mods::ModLoader::instance().find_mod(mId) != nullptr;
+        const auto* update = mods::updates::find(mId);
+        const bool hasUpdate = installed && update && update->actionable;
+        const auto label = hasUpdate          ? "Update available" :
+                           installed          ? "Installed" :
+                           mNativeCodeBlocked ? "Requires bundling" :
+                                                mPackageSize;
+        if (mLabel != label) {
+            set_text_content(mStatus, label);
+            mStatus->SetClass("installed", installed && !hasUpdate);
+            mStatus->SetClass("update-available", hasUpdate);
+            mLabel = label;
+        }
+        Button::update();
+    }
+
+private:
+    std::string mId;
+    std::string mPackageSize;
+    bool mNativeCodeBlocked = false;
+    std::string mLabel;
+    Rml::Element* mStatus = nullptr;
 };
 
 class ScreenshotViewer final : public Window {
@@ -236,7 +268,7 @@ private:
                                                  .verticalBoundary = NavGroup::Boundary::Stop,
                                              });
         auto& back = actions.add_item<Button>("Back");
-        back.root()->SetClass("catalog-icon-action", true);
+        back.root()->SetClass("compact", true);
         set_icon_button_content(back, "arrow_back", "Back");
         back.on_pressed([this] { pop(); });
         auto& previous = actions.add_item<ControlledButton>(ControlledButton::Props{
@@ -265,6 +297,11 @@ private:
                 mRebuildRequested = true;
             }
         });
+        Rml::ElementList buttons;
+        actions.root()->QuerySelectorAll(buttons, "button");
+        for (auto* button : buttons) {
+            button->SetClass("compact", true);
+        }
         if (mRestoreNav < 0) {
             if (!previous.focus()) {
                 next.focus();
@@ -305,6 +342,7 @@ public:
     }
 
     void update() override {
+        ZoneScopedN("Mod browser detail update");
         if (mFetch && mFetch.ready()) {
             try {
                 if (auto result = mFetch.try_take()) {
@@ -337,7 +375,7 @@ public:
         }
     }
 
-    void show_downloads(const std::string& id) { push(std::make_unique<QueueWindow>(id)); }
+    void show_downloads(const std::string& id) { show_online_mods(id); }
 
 private:
     void begin_fetch() {
@@ -348,9 +386,10 @@ private:
     }
 
     void build_content(Rml::Element* content) {
+        mRoot->SetClass("image-header", mDetail && (mDetail->mod.banner || mDetail->mod.icon));
         if (mDetail) {
             auto* scroll = append(content, "detail-scroll");
-            add_child<DetailContent>(scroll, *this, *mDetail);
+            add_child<DetailContent>(scroll, *this, *mDetail).focus();
             return;
         }
 
@@ -377,20 +416,18 @@ class CatalogInstallButton final : public Button {
 public:
     CatalogInstallButton(
         Rml::Element* parent, ModBrowserDetail& window, const mods::catalog::Detail& detail)
-        : Button{parent, Props{}}, mWindow{window}, mRequest{
-                                                        .id = detail.mod.id,
-                                                        .name = detail.mod.name,
-                                                        .version = detail.mod.version,
-                                                        .source =
-                                                            mods::queue::Url{
-                                                                .url = detail.download.url,
-                                                                .sha256 = detail.download.sha256,
-                                                                .size = detail.download.size,
-                                                            },
-                                                        .icon = queue_icon(detail.mod.icon),
-                                                    } {
+        : Button{parent, Props{}}, mWindow{window},
+          mRequest{
+              .id = detail.mod.id,
+              .name = detail.mod.name,
+              .version = detail.mod.version,
+              .source = detail.download,
+              .icon = queue_icon(detail.mod.icon),
+          },
+          mNativeCodeBlocked{
+              detail.mod.containsNativeCode && !mods::catalog::supports_native_installs()} {
         mRoot->SetClass("catalog-install-action", true);
-        mCaption = append(parent, "catalog-install-caption");
+        mCaption = append(parent, "small");
         on_pressed([this] { press(); });
         update();
     }
@@ -426,17 +463,18 @@ public:
                 icon = "schedule";
                 label = "Queued";
                 if (const auto ahead = mods::queue::active_items_ahead(mRequest.id); ahead != 0) {
-                    caption = fmt::format("{} ahead · opens the queue", ahead);
+                    caption = fmt::format("{} ahead · view downloads", ahead);
                 } else {
-                    caption = "Next · opens the queue";
+                    caption = "Next · view downloads";
                 }
                 break;
             case Downloading:
                 label = fmt::format(
                     "{} / {}", format_bytes(queued->completed), format_bytes(queued->total));
-                caption = "Tap to open the queue";
+                caption = "View downloads & installs";
                 break;
             case Paused:
+                mAction = Action::Resume;
                 icon = "play_arrow";
                 label = "Resume";
                 caption = fmt::format("{} kept on disk", format_bytes(queued->completed));
@@ -462,6 +500,7 @@ public:
             case InstallFailed:
                 break;
             case Failed:
+                mAction = Action::RetryDownload;
                 icon = "refresh";
                 label = queued->local ? "Retry package" : "Retry download";
                 caption = queued->message.empty() ? "Package preparation failed" : queued->message;
@@ -474,12 +513,13 @@ public:
 
         if (label.empty()) {
             mAction = Action::Install;
-            const int versionOrder = local != nullptr ?
-                mods::compare_package_versions(mRequest.version, local->metadata.version) : 1;
+            const int versionOrder =
+                local != nullptr ?
+                    mods::compare_package_versions(mRequest.version, local->metadata.version) :
+                    1;
             const bool current = local != nullptr && versionOrder == 0;
-            const bool updateable =
-                local != nullptr && versionOrder > 0 &&
-                mods::ModLoader::instance().can_update(*local);
+            const bool updateable = local != nullptr && versionOrder > 0 &&
+                                    mods::ModLoader::instance().can_update(*local);
             if (activationPending) {
                 icon = "schedule";
                 label = "Activating…";
@@ -503,8 +543,48 @@ public:
                 state = "installed";
                 progress = 1.0f;
             } else {
-                label = updateable ? "Update" : "Install";
+                label = "Install";
+                if (updateable) {
+                    const auto* update = mods::updates::find(mRequest.id);
+                    if (!borealis::update::parse_version(local->metadata.version)) {
+                        label = "Unavailable";
+                        caption = "The installed version cannot be compared.";
+                        disabled = true;
+                    } else if (update && !update->queueKey.empty()) {
+                        label = "View download";
+                        mAction = Action::OpenQueue;
+                        mQueueId = update->queueKey;
+                    } else if (update && update->result.target && update->actionable) {
+                        const bool sameVersion = update->result.target->version == mRequest.version;
+                        label = sameVersion ? "Update" : "View compatible update";
+                        mAction = sameVersion ? Action::Update : Action::OpenUpdates;
+                    } else if (update && !update->reason.empty() &&
+                               mods::updates::state() == mods::updates::State::Ready)
+                    {
+                        label = "Unavailable";
+                        caption = update->reason;
+                        disabled = true;
+                    } else {
+                        const bool checking =
+                            mods::updates::state() == mods::updates::State::Checking;
+                        label = checking ? "Checking…" : "Check for updates";
+                        mAction = Action::CheckUpdates;
+                        disabled = checking;
+                    }
+                }
             }
+        }
+        const bool requiresBundling =
+            mNativeCodeBlocked && !activationPending &&
+            (mAction == Action::Install || mAction == Action::Update || mAction == Action::Resume ||
+                mAction == Action::RetryDownload || mAction == Action::CheckUpdates);
+        if (requiresBundling) {
+            icon = "block";
+            label = "Requires bundling";
+            caption = "Contains native code; requires bundling.";
+            state = "idle";
+            progress = 0.0f;
+            disabled = true;
         }
         if (disabled) {
             mAction = Action::None;
@@ -519,6 +599,8 @@ public:
             mIcon = icon;
         }
         set_text_content(mCaption, caption);
+        mCaption->SetClass("requires-bundling", requiresBundling);
+        mRoot->SetClass("primary", state == "idle");
         for (const auto* candidate : {"idle", "queued", "downloading", "paused", "retrying",
                  "installing", "installed", "failed"})
         {
@@ -526,16 +608,29 @@ public:
             mCaption->SetClass(candidate, state == candidate);
         }
         if (mProgress != nullptr) {
+            mProgress->SetClassNames(state);
             mProgress->SetAttribute("value", progress);
-            mProgress->SetProperty(
-                "display", state == "idle" || state == "installed" ? "none" : "block");
+            set_display(mProgress, state == "idle" || state == "installed" ?
+                                       Rml::Style::Display::None :
+                                       Rml::Style::Display::Block);
         }
         set_disabled(disabled);
         Button::update();
     }
 
 private:
-    enum class Action { Install, OpenQueue, RetryActivation, OpenManager, None };
+    enum class Action {
+        Update,
+        CheckUpdates,
+        OpenUpdates,
+        Install,
+        OpenQueue,
+        Resume,
+        RetryDownload,
+        RetryActivation,
+        OpenManager,
+        None
+    };
 
     std::optional<mods::queue::Item> matching_queue_item() const {
         auto item = mods::queue::find_by_mod_id(mRequest.id);
@@ -550,16 +645,30 @@ private:
     void press() {
         update();
         switch (mAction) {
+        case Action::Update:
+            enqueue_mod_update(mRequest.id);
+            return;
+        case Action::CheckUpdates:
+            mods::updates::request_check();
+            return;
+        case Action::OpenUpdates:
+            show_online_mods();
+            return;
         case Action::OpenQueue:
             mWindow.show_downloads(mQueueId);
+            return;
+        case Action::Resume:
+            mods::queue::resume(mQueueId);
+            return;
+        case Action::RetryDownload:
+            mods::queue::retry(mQueueId);
             return;
         case Action::RetryActivation:
             mActivationOperation = mods::ModLoader::instance().request_reactivate(mRequest.id);
             return;
         case Action::OpenManager:
-            pop_to_or_push<ModsWindow>([id = mRequest.id](ModsWindow& window) {
-                window.select_mod(id);
-            });
+            pop_to_or_push<ModsWindow>(
+                [id = mRequest.id](ModsWindow& window) { window.select_mod(id); });
             return;
         case Action::None:
             return;
@@ -578,6 +687,7 @@ private:
 
     ModBrowserDetail& mWindow;
     mods::queue::Request mRequest;
+    bool mNativeCodeBlocked = false;
     Rml::Element* mCaption = nullptr;
     Rml::Element* mProgress = nullptr;
     std::string mLabel;
@@ -586,7 +696,7 @@ private:
     Action mAction = Action::None;
     mods::ModOperationHandle mActivationOperation;
 
-    uint64_t package_size() const { return std::get<mods::queue::Url>(mRequest.source).size; }
+    uint64_t package_size() const { return std::get<mods::Download>(mRequest.source).size; }
 };
 
 DetailContent::DetailContent(
@@ -612,12 +722,14 @@ DetailContent::DetailContent(
                                                      .verticalBoundary = Boundary::Bubble,
                                                  });
     auto& back = actions.add_item<Button>("Back");
-    back.root()->SetClass("catalog-icon-action", true);
+    back.root()->SetClass("compact", true);
     set_icon_button_content(back, "arrow_back", "Back");
+    back.root()->SetClass("overlay", true);
     back.on_pressed([&window] { window.pop(); });
     auto& open = actions.add_item<Button>("Open in browser");
-    open.root()->SetClass("catalog-icon-action", true);
+    open.root()->SetClass("compact", true);
     set_icon_button_content(open, "open_in_new", "Open in browser");
+    open.root()->SetClass("overlay", true);
     open.on_pressed([url = detail.siteUrl] { open_web_url(url); });
 
     auto* identity = append(hero, "catalog-detail-identity");
@@ -648,7 +760,9 @@ DetailContent::DetailContent(
 
     auto* stats = append(mRoot, "catalog-detail-stats");
     append_stat(stats, "download", format_count(detail.mod.downloads), " downloads");
-    append_stat(stats, "favorite", format_count(detail.mod.endorsements), " endorsements");
+    if constexpr (kEnableEndorsements) {
+        append_stat(stats, "favorite", format_count(detail.mod.endorsements), " endorsements");
+    }
 
     auto* body = append(mRoot, "catalog-detail-body");
     auto* main = append(body, "main");
@@ -684,13 +798,16 @@ DetailContent::DetailContent(
             set_image(image, detail.screenshots[index].image, index == 0 ? 1280 : 640);
             if (index == 2 && detail.screenshots.size() > shown) {
                 auto* more = append(screenshot.root(), "catalog-screenshot-more");
-                append_text_element(more, "span", fmt::format("+{}", detail.screenshots.size() - shown));
+                append_text_element(
+                    more, "span", fmt::format("+{}", detail.screenshots.size() - shown));
             }
             screenshot.on_pressed([&window, index] { window.show_screenshot(index); });
         }
     }
 
-    if (std::ranges::any_of(detail.serviceImports, [](const auto& import) { return !import.optional; })) {
+    if (std::ranges::any_of(
+            detail.serviceImports, [](const auto& import) { return !import.optional; }))
+    {
         auto* dependencies = append(main, "section");
         dependencies->SetClass("catalog-scroll-anchor", true);
         add_existing_item<ScrollAnchor>(dependencies);
@@ -702,8 +819,8 @@ DetailContent::DetailContent(
             if (import.optional) {
                 continue;
             }
-            const bool available =
-                mods::svc::find_service(import.id.c_str(), import.major, import.minMinor) != nullptr;
+            const bool available = mods::svc::find_service(
+                                       import.id.c_str(), import.major, import.minMinor) != nullptr;
             if (import.id.starts_with(DUSKLIGHT_SERVICE_ID_PREFIX)) {
                 ++requiredDusklight;
                 if (!available) {
@@ -723,8 +840,9 @@ DetailContent::DetailContent(
             auto* row = append(dependencyList, "catalog-dependency");
             append_text_element(row, "catalog-dependency-name", "Dusklight services");
             append_text_element(row, "catalog-dependency-status",
-                dusklightProblems.empty() ? fmt::format("{} required · Available", requiredDusklight) :
-                                           fmt::format("{} required", requiredDusklight));
+                dusklightProblems.empty() ?
+                    fmt::format("{} required · Available", requiredDusklight) :
+                    fmt::format("{} required", requiredDusklight));
             for (const auto& problem : dusklightProblems) {
                 append_text_element(row, "catalog-dependency-status", problem);
             }
@@ -761,8 +879,8 @@ DetailContent::DetailContent(
 
 ModBrowser::ModBrowser()
     : Window{Props{.tabBar = false, .styleSheets = {"res/rml/mod_browser.rcss"}}} {
+    mQuery.includeNatives = mods::catalog::supports_native_installs();
     mRoot->SetClass("mod-browser", true);
-    mQuery.sort = mods::catalog::Sort::Updated;
     mLoaderGeneration = mods::ModLoader::instance().generation();
     mState = borealis::http::available() ? State::Loading : State::Unavailable;
     set_content([this](Rml::Element* content) { build_content(content); });
@@ -793,42 +911,69 @@ void ModBrowser::build_content(Rml::Element* content) {
             },
         .maxLength = 100,
     });
-    append_text(append(filtersRoot, "h2"), "Category");
-    auto& category = filters.add_item<ControlledSelectButton>(ControlledSelectButton::Props{
+    std::vector<DropdownButton::Option> categoryOptions{{"All"}};
+    if (mPage) {
+        for (const auto& category : mPage->categories) {
+            categoryOptions.push_back({category.name});
+        }
+    }
+    auto& category = filters.add_item<DropdownButton>(DropdownButton::Props{
         .key = "Category",
+        .options = std::move(categoryOptions),
         .getValue =
             [this] {
                 if (mQuery.category.empty() || !mPage) {
-                    return Rml::String{"All mods"};
+                    return 0;
                 }
                 const auto iter = std::ranges::find(
                     mPage->categories, mQuery.category, &mods::catalog::Category::slug);
-                return iter == mPage->categories.end() ? Rml::String{"All mods"} : iter->name;
+                return iter == mPage->categories.end() ?
+                           0 :
+                           static_cast<int>(iter - mPage->categories.begin()) + 1;
+            },
+        .setValue =
+            [this](int index) {
+                mQuery.category = index == 0 ? std::string{} : mPage->categories[index - 1].slug;
+                mQuery.page = 1;
+                begin_fetch(FocusTarget::Category);
+            },
+        .isDisabled = [this] { return !mPage || mPage->categories.empty(); },
+    });
+    std::vector<DropdownButton::Option> sortLabels;
+    for (const auto& option : sortOptions) {
+        sortLabels.push_back({Rml::String{option.label}});
+    }
+    auto& sort = filters.add_item<DropdownButton>(DropdownButton::Props{
+        .key = "Sort by",
+        .options = std::move(sortLabels),
+        .getValue =
+            [this] {
+                const auto iter = std::ranges::find(sortOptions, mQuery.sort, &SortOption::value);
+                return iter == sortOptions.end() ? 0 : static_cast<int>(iter - sortOptions.begin());
+            },
+        .setValue =
+            [this](int index) {
+                mQuery.sort = sortOptions[index].value;
+                mQuery.page = 1;
+                begin_fetch(FocusTarget::Sort);
             },
     });
-    category.on_pressed([this] { cycle_category(); });
-    auto& sort = filters.add_item<ControlledSelectButton>(ControlledSelectButton::Props{
-        .key = "Sort by",
-        .getValue = [this] { return Rml::String{sort_label(mQuery.sort)}; },
-    });
-    sort.on_pressed([this] { cycle_sort(); });
     auto& device = filters.add_item<BoolButton>(BoolButton::Props{
-        .key = "This device",
+        .key = "Compatible only",
         .getValue = [this] { return mQuery.thisDevice; },
         .setValue =
             [this](bool value) {
                 if (mQuery.thisDevice != value) {
                     mQuery.thisDevice = value;
+                    mQuery.includeNatives = !value || mods::catalog::supports_native_installs();
                     mQuery.page = 1;
                     begin_fetch(FocusTarget::Device);
                 }
             },
     });
-    append_text(append(filtersRoot, "h2"), "Library");
-    auto& library = filters.add_item<Button>(
-        fmt::format("Installed mods ({})", mods::ModLoader::instance().mods().size()));
-    library.root()->SetClass("catalog-library-link", true);
-    library.on_pressed([this] { pop(); });
+    for (auto* control : {search.root(), category.root(), sort.root(), device.root()}) {
+        control->SetClass("compact", true);
+    }
 
     auto* resultsRoot = append(content, "catalog-results");
     auto& results =
@@ -906,6 +1051,11 @@ void ModBrowser::build_content(Rml::Element* content) {
                         begin_fetch(FocusTarget::Results);
                     }
                 });
+            Rml::ElementList buttons;
+            paginationRoot->QuerySelectorAll(buttons, "button");
+            for (auto* button : buttons) {
+                button->SetClass("compact", true);
+            }
         }
     } else {
         auto* status = append(viewport, "catalog-results-status");
@@ -995,34 +1145,8 @@ void ModBrowser::finish_fetch(mods::catalog::FetchResult result) {
     mRebuildRequested = true;
 }
 
-void ModBrowser::cycle_category() {
-    if (!mPage || mPage->categories.empty()) {
-        return;
-    }
-    if (mQuery.category.empty()) {
-        mQuery.category = mPage->categories.front().slug;
-    } else {
-        const auto iter =
-            std::ranges::find(mPage->categories, mQuery.category, &mods::catalog::Category::slug);
-        const auto next =
-            iter == mPage->categories.end() ? mPage->categories.begin() : std::next(iter);
-        mQuery.category = next == mPage->categories.end() ? std::string{} : next->slug;
-    }
-    mQuery.page = 1;
-    begin_fetch(FocusTarget::Category);
-}
-
-void ModBrowser::cycle_sort() {
-    const auto iter = std::ranges::find(sortOptions, mQuery.sort, &SortOption::value);
-    const auto next = iter == sortOptions.end() || std::next(iter) == sortOptions.end() ?
-                          sortOptions.begin() :
-                          std::next(iter);
-    mQuery.sort = next->value;
-    mQuery.page = 1;
-    begin_fetch(FocusTarget::Sort);
-}
-
 void ModBrowser::update() {
+    ZoneScopedN("Mod browser update");
     const auto loaderGeneration = mods::ModLoader::instance().generation();
     if (loaderGeneration != mLoaderGeneration) {
         mLoaderGeneration = loaderGeneration;
@@ -1042,8 +1166,17 @@ void ModBrowser::update() {
         mFetch = {};
     }
     if (mRebuildRequested) {
+        ZoneScopedN("Mod browser rebuild");
         mRebuildRequested = false;
+        auto* viewport = mContentRoot->QuerySelector("catalog-viewport");
+        const float scrollTop = viewport ? viewport->GetScrollTop() : 0;
         rebuild_content();
+        if (mState == State::Ready) {
+            mDocument->UpdateDocument();
+            if (auto* restored = mContentRoot->QuerySelector("catalog-viewport")) {
+                restored->SetScrollTop(scrollTop);
+            }
+        }
     }
     Window::update();
 }

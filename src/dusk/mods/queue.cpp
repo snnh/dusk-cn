@@ -1,9 +1,10 @@
 #include "queue.hpp"
+#include "updates.hpp"
 
 #include "dusk/hash.hpp"
 #include "dusk/mod_loader.hpp"
-#include "dusk/mods/path.hpp"
 #include "dusk/ui/ui.hpp"
+#include "dusk/utilities.hpp"
 
 #include <borealis/http.hpp>
 #include <borealis/io.hpp>
@@ -41,6 +42,7 @@ enum class PendingIntent { None, Pause, Cancel };
 struct QueueItem {
     std::string key;
     Request request;
+    std::string previousVersion;
     State state = State::Queued;
     std::filesystem::path partialPath;
     uint64_t completed = 0;
@@ -69,8 +71,8 @@ QueueItem* find_queue_item_by_mod_id(std::string_view id) {
     return item == queueItems.end() ? nullptr : &*item;
 }
 
-const Url* url_source(const QueueItem& item) {
-    return std::get_if<Url>(&item.request.source);
+const Download* url_source(const QueueItem& item) {
+    return std::get_if<Download>(&item.request.source);
 }
 
 const LocalFile* local_source(const QueueItem& item) {
@@ -126,7 +128,8 @@ std::string sha256_file(
 
 std::filesystem::path staging_path(
     const std::filesystem::path& stagingDir, std::string_view modId, std::string_view key) {
-    return stagingDir / fmt::format("{}-{}.dusk.part", safe_filename(modId), safe_filename(key));
+    return stagingDir /
+           fmt::format("{}-{}.dusk.part", utils::safe_filename(modId), utils::safe_filename(key));
 }
 
 bool copy_to_staging(const std::filesystem::path& source, const std::filesystem::path& destination,
@@ -171,7 +174,7 @@ bool copy_to_staging(const std::filesystem::path& source, const std::filesystem:
 }
 
 VerifyResult verify_url_package(const std::filesystem::path& path, const Request& request,
-    const Url& source, const std::filesystem::path& stagingDir, std::string key,
+    const Download& source, const std::filesystem::path& stagingDir, std::string key,
     borealis::TaskContext& context) {
     std::error_code ec;
     const auto actualSize = std::filesystem::file_size(path, ec);
@@ -292,6 +295,12 @@ void schedule_retry(QueueItem& item, std::string message) {
 }
 
 void start_download(QueueItem& item) {
+    if (item.request.update) {
+        if (auto error = updates::validate(*item.request.update); !error.empty()) {
+            fail(item, std::move(error), false);
+            return;
+        }
+    }
     const auto* source = url_source(item);
     if (source == nullptr) {
         fail(item, "The install source is not a URL", false);
@@ -304,7 +313,7 @@ void start_download(QueueItem& item) {
     }
 
     item.partialPath =
-        userDir / ".downloads" / fmt::format("{}.dusk.part", safe_filename(item.request.id));
+        userDir / ".downloads" / fmt::format("{}.dusk.part", utils::safe_filename(item.request.id));
     std::error_code ec;
     std::filesystem::create_directories(item.partialPath.parent_path(), ec);
     if (ec) {
@@ -462,12 +471,19 @@ void finish_verification(QueueItem& item) {
         fail(item, "The local package changed after confirmation", true);
         return;
     }
+    if (item.request.update) {
+        if (auto error = updates::validate(*item.request.update); !error.empty()) {
+            fail(item, std::move(error), true);
+            return;
+        }
+    }
     item.request.id = result.metadata.id;
     item.request.name = result.metadata.name;
     item.request.version = result.metadata.version;
     item.completed = item.total;
     item.state = State::Handoff;
-    item.operation = ModLoader::instance().request_install(std::move(result.stagedPath));
+    item.operation =
+        ModLoader::instance().request_install(std::move(result.stagedPath), item.request.update);
 }
 
 Item snapshot(const QueueItem& item) {
@@ -476,6 +492,7 @@ Item snapshot(const QueueItem& item) {
         .modId = item.request.id,
         .name = item.request.name,
         .version = item.request.version,
+        .previousVersion = item.previousVersion,
         .state = item.state,
         .completed = item.completed,
         .total = item.total,
@@ -504,7 +521,7 @@ Item snapshot(const QueueItem& item) {
 }  // namespace
 
 bool enqueue(Request request, std::string* keyOut) {
-    const auto* source = std::get_if<Url>(&request.source);
+    const auto* source = std::get_if<Download>(&request.source);
     const auto* local = std::get_if<LocalFile>(&request.source);
     if (source != nullptr) {
         if (request.id.empty() || request.version.empty() || source->size == 0 ||
@@ -520,11 +537,18 @@ bool enqueue(Request request, std::string* keyOut) {
         request.name = request.id;
     }
 
+    std::string previousVersion;
+    if (const auto* installed = ModLoader::instance().find_mod(request.id);
+        installed && installed->metadata.version != request.version)
+    {
+        previousVersion = installed->metadata.version;
+    }
     if (auto* existing = find_queue_item_by_mod_id(request.id)) {
         if (!is_terminal(existing->state)) {
             return false;
         }
         existing->request = std::move(request);
+        existing->previousVersion = std::move(previousVersion);
         existing->state = State::Queued;
         existing->completed = 0;
         existing->total = total;
@@ -543,7 +567,12 @@ bool enqueue(Request request, std::string* keyOut) {
     if (keyOut != nullptr) {
         *keyOut = key;
     }
-    queueItems.push_back({.key = key, .request = std::move(request), .total = total});
+    queueItems.push_back({
+        .key = key,
+        .request = std::move(request),
+        .previousVersion = std::move(previousVersion),
+        .total = total,
+    });
     return true;
 }
 
@@ -629,17 +658,6 @@ bool has_active_items() {
 
 size_t item_count() noexcept {
     return queueItems.size();
-}
-
-size_t active_count() noexcept {
-    return static_cast<size_t>(std::ranges::count_if(
-        queueItems, [](const QueueItem& item) { return !is_terminal(item.state); }));
-}
-
-std::optional<Item> first_active() {
-    const auto item = std::ranges::find_if(
-        queueItems, [](const QueueItem& candidate) { return !is_terminal(candidate.state); });
-    return item == queueItems.end() ? std::nullopt : std::optional<Item>{snapshot(*item)};
 }
 
 size_t active_items_ahead(std::string_view id) noexcept {
@@ -760,10 +778,6 @@ void pause_all() {
     for (const auto& id : ids) {
         pause(id);
     }
-}
-
-void clear_finished() {
-    std::erase_if(queueItems, [](const QueueItem& item) { return is_terminal(item.state); });
 }
 
 }  // namespace dusk::mods::queue

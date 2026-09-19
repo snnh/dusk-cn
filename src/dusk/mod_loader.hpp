@@ -2,6 +2,7 @@
 
 #include "dusk/config.hpp"
 #include "dusk/config_var.hpp"
+#include "dusk/mods/updates.hpp"
 #include "mods/api.h"
 #include "mods/runtime.h"
 
@@ -277,7 +278,8 @@ public:
     void request_enable(std::string_view id);
     void request_disable(std::string_view id);
     ModOperationHandle request_reload(std::string_view id);
-    ModOperationHandle request_install(std::filesystem::path path);
+    ModOperationHandle request_install(
+        std::filesystem::path path, std::optional<UpdatePrecondition> update = {});
     ModOperationHandle request_uninstall(std::string_view id);
     ModOperationHandle request_reactivate(std::string_view id);
     void notify_mod_failure(LoadedMod& mod, bool firstFailure);
@@ -287,6 +289,8 @@ public:
     [[nodiscard]] bool can_update(const LoadedMod& mod) const;
     [[nodiscard]] LoadedMod* find_mod(std::string_view id);
     [[nodiscard]] const LoadedMod* find_mod(std::string_view id) const;
+
+    [[nodiscard]] bool initialized() const noexcept { return m_startupComplete; }
     [[nodiscard]] uint64_t generation() const noexcept { return m_generation; }
 
     [[nodiscard]] auto mods() const {
@@ -306,6 +310,7 @@ private:
     };
     struct InstallRequest {
         std::filesystem::path stagedPath;
+        std::optional<UpdatePrecondition> update;
         std::shared_ptr<ModOperation> operation;
     };
     struct ReloadRequest {
@@ -363,7 +368,8 @@ private:
 
     void drain_retired_natives();
     void apply_pending_requests();
-    [[nodiscard]] OperationResult install_staged(const std::filesystem::path& path);
+    [[nodiscard]] OperationResult install_staged(
+        const std::filesystem::path& path, const std::optional<UpdatePrecondition>& update);
     [[nodiscard]] OperationResult load_runtime_mod(const std::filesystem::path& path);
     [[nodiscard]] OperationResult reload_runtime_mod(
         LoadedMod& mod, const PackageCandidate* replacement = nullptr);

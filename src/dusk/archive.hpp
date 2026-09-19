@@ -29,7 +29,9 @@ public:
     PackageFormat package_format() const noexcept;
     std::vector<uint8_t> read_file(std::string_view name);
     std::vector<std::string> file_names();
-    size_t file_size(std::string_view name);
+    size_t file_size(const std::string& name);
+    bool file_exists(const std::string& name) const;
+    bool directory_exists(const std::string& name) const;
 
 private:
     struct Impl;

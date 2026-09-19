@@ -19,6 +19,7 @@
 
 #if TARGET_PC
 #include "dusk/autosave.h"
+#include "dusk/game_clock.h"
 #include "dusk/game_mode.hpp"
 #include "dusk/imgui/ImGuiConsole.hpp"
 #include "dusk/memory.h"
@@ -147,6 +148,8 @@ s32 dScnName_c::create() {
         #endif
 
         dComIfGp_getVibration().Init();
+
+        IF_DUSK(base.draw_interp_frame = true);
     }
     return phase_state;
 }
@@ -243,7 +246,9 @@ s32 dScnName_c::execute() {
 }
 
 s32 dScnName_c::draw() {
+    IF_DUSK_BLOCK(dusk::game_clock::is_sim_frame())
     dComIfGp_getVibration().Run();
+    IF_DUSK_BLOCK_END
 
     switch (mDrawProc) {
     case 0:

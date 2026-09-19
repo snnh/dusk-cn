@@ -4,8 +4,8 @@
 #include "dusk/mods/loader/packages.hpp"
 #include "dusk/mods/queue.hpp"
 #include "format.hpp"
+#include "mods_window.hpp"
 #include "package_row.hpp"
-#include "queue_window.hpp"
 
 #include <borealis/io.hpp>
 #include <borealis/update.hpp>
@@ -148,10 +148,7 @@ void DropInstallModal::install() {
     }
     pop();
     if (!firstKey.empty()) {
-        if (auto* current = top_document()) {
-            current->cover();
-        }
-        push_document(std::make_unique<QueueWindow>(std::move(firstKey)));
+        show_online_mods(std::move(firstKey));
     }
 }
 

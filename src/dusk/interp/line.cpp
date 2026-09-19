@@ -1,8 +1,8 @@
 #include "dusk/interp/line.h"
 
-#include "dusk/interp/dual_buffer.h"
 #include "dusk/interp/frame_interpolation.h"
 #include "dusk/interp/lerp.h"
+#include "dusk/interp/samples.h"
 
 #include "m_Do/m_Do_ext.h"
 
@@ -91,7 +91,7 @@ void copy_points(cXyz* destination, const dusk::interp::line::Points& points) {
 namespace dusk::interp::line {
 
 void reset(const void* owner) {
-    erase_owned_buffers(owner);
+    erase_owned_samples(owner);
 }
 
 void capture(const void* owner, Points points) {

@@ -1537,6 +1537,12 @@ void dCamera_c::CalcTrimSize() {
         OS_REPORT("%06d: camera: trim: keep\n", mFrameCounter);
     }
 
+#if TARGET_PC
+    if (dusk::isLetterboxingDisabled(dComIfGp_event_runCheck())) {
+        mTrimHeight = 0.0f;
+    }
+#endif
+
     if (mCurState == 1) {
         mCurState = 0;
     } else if (mCurState == 2) {
@@ -10593,9 +10599,11 @@ bool dCamera_c::eventCamera(s32 param_0) {
         if (getEvIntData(&sp24, "LoadPos") != 0) {
             if ((sp24 == 0) || (sp24 == 1)) {
                 popInfo(&mSavedViewStack[sp24]);
+                IF_DUSK(dusk::interp::request_presentation_sync());
             }
             if (sp24 == 2) {
                 popInfo(&mSavedView);
+                IF_DUSK(dusk::interp::request_presentation_sync());
             }
         }
     }
@@ -10790,6 +10798,7 @@ s16 dCamera_c::runEventRecoveryTrans() {
 void dCamera_c::EventRecoverNotime() {
     mRecovery.field_0x4 = 1;
     Reset(mRecovery.field_0x8.mCenter, mRecovery.field_0x8.mEye, mRecovery.field_0x8.mFovy, mRecovery.field_0x8.mBank);
+    IF_DUSK(dusk::interp::request_presentation_sync());
 }
 
 int dCamera_c::Set(cXyz i_center, cXyz i_eye) {

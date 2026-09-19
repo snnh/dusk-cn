@@ -38,6 +38,8 @@
 #include "m_Do/m_Do_mtx.h"
 
 #if TARGET_PC
+#include "dusk/game_clock.h"
+#include "dusk/interp/user_interface.h"
 #include "dusk/menu_pointer.h"
 #include "dusk/utilities.hpp"
 #endif
@@ -1001,10 +1003,14 @@ void dMenu_Collect2D_c::animationSet() {
 
 void dMenu_Collect2D_c::btkAnimeLoop0(J2DAnmTextureSRTKey* i_SRTKey) {
     if (i_SRTKey != NULL) {
+#if TARGET_PC
+        dusk::vdt::advance_looping_frame(mFrame, 1.0f, i_SRTKey->getFrameMax());
+#else
         mFrame++;
         if (mFrame >= i_SRTKey->getFrameMax()) {
             mFrame -= i_SRTKey->getFrameMax();
         }
+#endif
         i_SRTKey->setFrame(mFrame);
     } else {
         mFrame = 0.0f;
@@ -1018,6 +1024,11 @@ void dMenu_Collect2D_c::btkAnimeLoop0(J2DAnmTextureSRTKey* i_SRTKey) {
 }
 
 void dMenu_Collect2D_c::setBackAlpha() {
+#if TARGET_PC
+    const f32 target = mProcess >= 1 && mProcess <= 18 ? 1.0f : 0.0f;
+    dusk::vdt::advance_toward_frame(mBackAlpha, target, 0.2f);
+    mpBlackTex->setAlpha(mBackAlpha * 150.0f);
+#else
     f32 alpha = mpBlackTex->getAlpha() / 150.0f;
 
     switch (mProcess) {
@@ -1058,6 +1069,7 @@ void dMenu_Collect2D_c::setBackAlpha() {
     }
 
     mpBlackTex->setAlpha(alpha * 150.0f);
+#endif
 }
 
 // Not sure if this works without gotos
@@ -2437,17 +2449,22 @@ void dMenu_Collect2D_c::_move() {
     if (mProcess != last_process) {
         (this->*init[mProcess])();
     }
+#if !TARGET_PC
     btkAnimeLoop0(mpAnmKey);
     mpScreen->animation();
     setBackAlpha();
+#endif
     setHIO(false);
 }
 
 
 void dMenu_Collect2D_c::_draw() {
-    #if TARGET_PC
+#if TARGET_PC
+    btkAnimeLoop0(mpAnmKey);
+    mpScreen->animation();
+    setBackAlpha();
     menuCollectWide();
-    #endif
+#endif
 
     J2DGrafContext* grafPort = dComIfGp_getCurrentGrafPort();
     grafPort->setup2D();
@@ -3058,7 +3075,7 @@ DUSK_GAME_DATA f32 dMenu_Collect3D_c::mViewOffsetY = -100.0f;
 
 void dMenu_Collect3D_c::setupItem3D(Mtx param_0) {
     GXSetViewport(0.0f, mViewOffsetY, FB_WIDTH, FB_HEIGHT, 0.0f, 1.0f);
-    mViewOffsetY = -100.0f;
+    IF_NOT_DUSK(mViewOffsetY = -100.0f);
     Mtx44 projection;
     C_MTXPerspective(projection, 45.0f, mDoGph_gInf_c::getAspect(), 1.0f, 100000.0f);
     GXSetProjection(projection, GX_PERSPECTIVE);
@@ -3159,6 +3176,8 @@ void dMenu_Collect_c::_move() {
 
 void dMenu_Collect_c::draw() {
     dComIfGd_set2DOpa(mpCollect2D);
+    IF_DUSK_BLOCK(dusk::game_clock::is_sim_frame())
     mpCollect3D->draw();
+    IF_DUSK_BLOCK_END
     mpCollect2D->drawTop();
 }

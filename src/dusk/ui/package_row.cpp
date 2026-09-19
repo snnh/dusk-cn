@@ -82,16 +82,17 @@ PackageRow::PackageRow(Rml::Element* parent) : Component{create_row(parent)} {
 void PackageRow::set_package(std::string name, std::string version, std::string status,
     std::string detail, std::string stateClass, std::optional<float> progress) {
     mRoot->SetClassNames(stateClass);
+    mProgress->SetClassNames(stateClass);
     set_text_content(mName, name);
     set_text_content(mVersion, fmt::format("v{}", version));
-    mVersion->SetProperty("display", version.empty() ? "none" : "block");
+    set_display(mVersion, version.empty() ? Rml::Style::Display::None : Rml::Style::Display::Block);
     set_text_content(mState, status);
     set_text_content(mDetail, detail);
     if (progress) {
-        mProgress->SetProperty("display", "block");
+        set_display(mProgress, Rml::Style::Display::Block);
         mProgress->SetAttribute("value", *progress);
     } else {
-        mProgress->SetProperty("display", "none");
+        set_display(mProgress, Rml::Style::Display::None);
     }
 }
 

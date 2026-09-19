@@ -1589,10 +1589,18 @@ int dMw_c::_create() {
     field_0x144 = 3;
 
     dMeter2Info_setWindowStatus(0);
+
+    IF_DUSK(base.draw_interp_frame = true);
+
     return cPhs_COMPLEATE_e;
 }
 
 int dMw_c::_execute() {
+#if TARGET_PC
+    if (mpMenuRing != NULL) {
+        mpMenuRing->advanceSelectItem();
+    }
+#endif
     if (field_0x151 != 0) {
         field_0x151--;
     }

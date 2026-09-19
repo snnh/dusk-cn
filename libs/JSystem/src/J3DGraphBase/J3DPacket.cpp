@@ -212,6 +212,9 @@ bool J3DMatPacket::isSame(J3DMatPacket* pOther) const {
 
 void J3DMatPacket::draw() {
     ZoneScoped;
+#if TARGET_PC 
+    j3dSys.setTexture(mpTexture);
+#endif
     mpMaterial->load();
 
 #if DEBUG && TARGET_PC
@@ -225,6 +228,9 @@ void J3DMatPacket::draw() {
     callDL();
 
     J3DShapePacket* packet = getShapePacket();
+#if TARGET_PC
+    packet->mpModel->getVertexBuffer()->setArray();
+#endif
     packet->getShape()->loadPreDrawSetting();
 
 #if DUSK_TPHD

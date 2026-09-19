@@ -111,9 +111,9 @@ public:
     void menuCursorMove2();
     void selectCursorPosSet(int);
 
-    #if TARGET_PC
+#if TARGET_PC
     void nameWide();
-    #endif
+#endif
 
     void _draw();
     void screenSet();
@@ -135,9 +135,9 @@ public:
     /* 0x00C */ dDlst_NameIN_c nameIn;
     /* 0x020 */ dSelect_cursor_c* mSelIcon;
     /* 0x024 */ J2DAnmColorKey* mCursorColorKey;
-    /* 0x028 */ int mCurColAnmF;
+    /* 0x028 */ DUSK_IF_ELSE(f32, int) mCurColAnmF;
     /* 0x02C */ J2DAnmTextureSRTKey* mCursorTexKey;
-    /* 0x030 */ int mCurTexAnmF;
+    /* 0x030 */ DUSK_IF_ELSE(f32, int) mCurTexAnmF;
     /* 0x034 */ CPaneMgrAlpha* mNameCursor[8];
     /* 0x054 */ TEXT_SPAN mNameText[8];
     /* 0x074 */ CPaneMgr* mMojiIcon[65];

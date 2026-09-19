@@ -129,6 +129,7 @@ Rml::Element* append_text_element(
     Rml::Element* parent, const Rml::String& tag, const Rml::String& text) noexcept;
 void clear_children(Rml::Element* parent) noexcept;
 void set_text_content(Rml::Element* parent, const Rml::String& text) noexcept;
+void set_display(Rml::Element* element, Rml::Style::Display display) noexcept;
 
 NavCommand map_nav_event(const Rml::Event& event) noexcept;
 Insets safe_area_insets(Rml::Context* context) noexcept;

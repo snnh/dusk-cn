@@ -1,5 +1,7 @@
 #pragma once
 
+#include "updates.hpp"
+
 #include <borealis/http.hpp>
 
 #include <cstdint>
@@ -10,6 +12,7 @@
 namespace dusk::mods::catalog {
 
 enum class Sort {
+    Featured,
     Downloads,
     Endorsements,
     Updated,
@@ -20,9 +23,10 @@ enum class Sort {
 struct Query {
     std::string search;
     std::string category;
-    Sort sort = Sort::Downloads;
+    Sort sort = Sort::Featured;
     int page = 1;
     bool thisDevice = true;
+    bool includeNatives = true;
 };
 
 struct Category {
@@ -77,19 +81,6 @@ struct Screenshot {
     Image image;
 };
 
-struct ServiceImport {
-    std::string id;
-    uint16_t major = 0;
-    uint16_t minMinor = 0;
-    bool optional = false;
-};
-
-struct Download {
-    std::string url;
-    std::string sha256;
-    uint64_t size = 0;
-};
-
 struct Detail {
     Mod mod;
     std::string siteUrl;
@@ -125,6 +116,18 @@ struct DetailFetchResult {
     std::optional<Detail> detail;
     std::string error;
 };
+
+struct UpdateFetchResult {
+    std::optional<std::vector<ModUpdate>> updates;
+    std::string error;
+    bool retryable = false;
+    int retryAfter = 0;
+};
+
+std::string_view platform() noexcept;
+bool supports_native_installs() noexcept;
+borealis::Task<UpdateFetchResult> fetch_updates(
+    UpdateEnvironment environment, std::vector<std::string> targets);
 
 /** Fetches one filtered page from the Dusklight catalog. */
 borealis::Task<FetchResult> fetch_page(Query query);

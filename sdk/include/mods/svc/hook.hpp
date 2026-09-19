@@ -136,8 +136,7 @@ struct NamedHook<Name, R(A...)> : HookImpl<detail::NameTag<Name>, R, A...> {};
  *   mods::hook::add_pre<LinkExecute>(on_link_execute);
  *
  * DEFINE_HOOK_SYMBOL names may be the platform mangled name (dlopen convention, no Mach-O
- * leading underscore) or the demangled qualified display name; overloaded display names are
- * ambiguous and need the mangled form.
+ * leading underscore), a qualified display name, or a source.cpp#qualified_name alias.
  */
 #if defined(__GNUC__) && !defined(__clang__) && defined(__ELF__)
 #define DEFINE_HOOK(target, alias)                                                                 \

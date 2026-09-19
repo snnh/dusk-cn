@@ -49,6 +49,13 @@ enum class FrameInterpMode : u8 {
     Unlimited = 2,
 };
 
+enum class LetterboxMode : u8 {
+    Off = 0,
+    On = 1,
+    GameplayOnly = 2,
+    CutsceneOnly = 3,
+};
+
 enum class TouchTargeting : u8 {
     Hybrid = 0,
     Hold = 1,
@@ -59,6 +66,12 @@ enum class MenuScaling : u8 {
     GameCube = 0,
     Wii = 1,
     Dusklight = 2,
+};
+
+enum class AlwaysGreatspinMode : u8 {
+    OFF = 0,
+    AFTER_SKILL = 1,
+    ALWAYS = 2,
 };
 
 enum class MagicArmorMode : u8 {
@@ -114,6 +127,12 @@ struct ConfigEnumRange<FrameInterpMode> {
 };
 
 template <>
+struct ConfigEnumRange<LetterboxMode> {
+    static constexpr auto min = LetterboxMode::Off;
+    static constexpr auto max = LetterboxMode::CutsceneOnly;
+};
+
+template <>
 struct ConfigEnumRange<TouchTargeting> {
     static constexpr auto min = TouchTargeting::Hybrid;
     static constexpr auto max = TouchTargeting::Switch;
@@ -123,6 +142,12 @@ template <>
 struct ConfigEnumRange<MenuScaling> {
     static constexpr auto min = MenuScaling::GameCube;
     static constexpr auto max = MenuScaling::Dusklight;
+};
+
+template <>
+struct ConfigEnumRange<AlwaysGreatspinMode> {
+    static constexpr auto min = AlwaysGreatspinMode::OFF;
+    static constexpr auto max = AlwaysGreatspinMode::ALWAYS;
 };
 
 template <>
@@ -185,6 +210,7 @@ struct UserSettings {
         ConfigVar<bool> biggerWallets;
         ConfigVar<bool> noReturnRupees;
         ConfigVar<bool> disableRupeeCutscenes;
+        ConfigVar<bool> fastTransitions;
         ConfigVar<bool> noSwordRecoil;
         ConfigVar<int> damageMultiplier;
         ConfigVar<bool> noHeartDrops;
@@ -196,6 +222,7 @@ struct UserSettings {
         ConfigVar<bool> buttonFishing;
         ConfigVar<bool> instantSaves;
         ConfigVar<bool> instantText;
+        ConfigVar<bool> holdToMash;
         ConfigVar<bool> sunsSong;
         ConfigVar<bool> autoSave;
         ConfigVar<bool> enhancedMapMenus;
@@ -225,6 +252,7 @@ struct UserSettings {
         ConfigVar<Resampler> resampler;
         ConfigVar<bool> enableMapBackground;
         ConfigVar<bool> disableCutscenePillarboxing;
+        ConfigVar<LetterboxMode> disableLetterboxing;
         ConfigVar<bool> enableHighQualityMinimapTextures;
 
         // Audio
@@ -278,13 +306,14 @@ struct UserSettings {
         ConfigVar<bool> enableIndefiniteItemDrops;
         ConfigVar<bool> moonJump;
         ConfigVar<bool> superClawshot;
-        ConfigVar<bool> alwaysGreatspin;
+        ConfigVar<AlwaysGreatspinMode> alwaysGreatspin;
         ConfigVar<bool> enableFastIronBoots;
         ConfigVar<bool> canTransformAnywhere;
         ConfigVar<bool> fastRoll;
         ConfigVar<bool> fastSpinner;
         ConfigVar<MagicArmorMode> armorRupeeDrain;
         ConfigVar<bool> invincibleEnemies;
+        ConfigVar<bool> easyQuickSpin;
 
         // Technical
         ConfigVar<bool> restoreWiiGlitches;
@@ -322,6 +351,7 @@ struct UserSettings {
         ConfigVar<bool> skipPreLaunchUI;
         ConfigVar<bool> wasPresetChosen;
         ConfigVar<bool> checkForUpdates;
+        ConfigVar<bool> checkForModUpdates;
         ConfigVar<int> cardFileType;
         ConfigVar<bool> enableAdvancedSettings;
     } backend;
@@ -346,6 +376,13 @@ void registerSettings();
 
 void applyInternalResolutionScale(int scale);
 void applyResampler(Resampler resampler);
+
+inline bool isLetterboxingDisabled(bool inCutscene) {
+    const auto mode = getSettings().game.disableLetterboxing.getValue();
+    return mode == LetterboxMode::On ||
+           (mode == LetterboxMode::CutsceneOnly && inCutscene) ||
+           (mode == LetterboxMode::GameplayOnly && !inCutscene);
+}
 
 // Transient settings
 

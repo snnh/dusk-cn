@@ -80,7 +80,13 @@ public:
 
     int remove(J3DModelData* i_modelData) { return i_modelData->removeTexMtxAnimator(mpAnm); }
     void entryFrame() { entryFrame(getFrame()); }
-    void entryFrame(f32 frame) { mpAnm->setFrame(frame); }
+#if TARGET_PC
+    void entryFrame(f32 frame);
+#else
+    void entryFrame(f32 frame) {
+        mpAnm->setFrame(frame);
+    }
+#endif
 
     J3DAnmTextureSRTKey* getBtkAnm() const { return mpAnm; }
 
@@ -110,7 +116,13 @@ public:
 
     int remove(J3DModelData* i_modelData) { return i_modelData->removeTevRegAnimator(mpAnm); }
     void entryFrame() { entryFrame(getFrame()); }
-    void entryFrame(f32 frame) { mpAnm->setFrame(frame); }
+#if TARGET_PC
+    void entryFrame(f32 frame);
+#else
+    void entryFrame(f32 frame) {
+        mpAnm->setFrame(frame);
+    }
+#endif
 
     J3DAnmTevRegKey* getBrkAnm() const { return mpAnm; }
 

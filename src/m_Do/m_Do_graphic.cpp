@@ -47,6 +47,7 @@
 
 #if TARGET_PC
 #include "dusk/dusk.h"
+#include "dusk/game_clock.h"
 #include "dusk/gfx.hpp"
 #include "dusk/imgui/ImGuiConsole.hpp"
 #include "dusk/interp/frame_interpolation.h"
@@ -474,9 +475,8 @@ void darwFilter(GXColor matColor) {
 }
 
 void mDoGph_gInf_c::calcFade() {
-    IF_DUSK_BLOCK(dusk::interp::get_ui_tick_pending())
     if (mFade != 0) {
-        mFadeRate += mFadeSpeed;
+        mFadeRate += mFadeSpeed IF_DUSK(* dusk::game_clock::original_frames());
 
         if (mFadeRate < 0.0f) {
             mFadeRate = 0.0f;
@@ -497,17 +497,8 @@ void mDoGph_gInf_c::calcFade() {
             mFadeColor.a = 0;
         }
     }
-    IF_DUSK_BLOCK_END
 
     if (mFadeColor.a != 0) {
-#if TARGET_PC
-        if (dusk::interp::is_enabled() && mFade != 0) {
-            const auto step = dusk::interp::get_interpolation_step();
-            const auto progress = mFadeSpeed < 0.0f ? 1.0f - mFadeRate : mFadeRate;
-            const auto fade_amt = mFadeRate + mFadeSpeed * (step - 1.0f + progress);
-            mFadeColor.a = 255.0f * std::clamp(fade_amt, 0.0f, 1.0f);
-        }
-#endif
         darwFilter(mFadeColor);
     }
 }
@@ -2166,16 +2157,6 @@ static void captureScreenPerspDrawInfo(JPADrawInfo& info) {
 
 static void drawItem3D() {
     ZoneScoped;
-#ifdef TARGET_PC
-    if (dusk::interp::is_enabled()) {
-        // FRAME INTERP NOTE: Title screen needs 0.0f while everything else that runs through this is -100.0f.
-        if (fopAcM_SearchByName(fpcNm_TITLE_e) != nullptr) {
-            dMenu_Collect3D_c::setViewPortOffsetY(0.0f);
-        } else {
-            dMenu_Collect3D_c::setViewPortOffsetY(-100.0f);
-        }
-    }
-#endif
     Mtx item_mtx;
     dMenu_Collect3D_c::setupItem3D(item_mtx);
 
@@ -2762,9 +2743,7 @@ int mDoGph_Painter() {
     #endif
 
     GXSetClipMode(GX_CLIP_ENABLE);
-    IF_DUSK_BLOCK(dusk::interp::get_ui_tick_pending())
     dDlst_list_c::calcWipe();
-    IF_DUSK_BLOCK_END
     j3dSys.reinitGX();
 
     ortho.setOrtho(mDoGph_gInf_c::getMinXF(), mDoGph_gInf_c::getMinYF(),

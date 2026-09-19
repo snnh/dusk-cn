@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dusk/mod_loader.hpp"
+#include "dusk/mods/services.hpp"
 #include "mods/svc/host.h"
 #include "mods/svc/log.h"
 
@@ -48,7 +49,9 @@ struct ServiceModule {
     void (*shutdown)() = nullptr;
 };
 
-bool valid_service_id(const char* serviceId);
+std::vector<ServiceExport> list_services();
+uint64_t services_generation() noexcept;
+
 ModResult register_service(const char* serviceId, uint16_t majorVersion, uint16_t minorVersion,
     const void* service, LoadedMod* provider, bool deferred);
 ModResult publish_deferred_service(

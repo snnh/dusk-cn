@@ -60,9 +60,16 @@ ContextMenu::ContextMenu(
         auto& button = mNavigation.add_item<Button>(Rml::String{});
         append_text(append(button.root(), "icon"), material_icon(item.icon));
         append_text_element(button.root(), "span", item.text);
-        button.root()->SetClass("destructive", item.destructive);
+        button.root()->SetClass("danger", item.destructive);
         button.set_disabled(!item.enabled || !item.onPressed);
+        button.set_selected(item.selected);
+        if (item.selected && mInitialFocus == nullptr && !button.disabled()) {
+            mInitialFocus = &button;
+        }
         button.on_pressed([this, callback = std::move(item.onPressed)] {
+            if (!visible() || !active()) {
+                return;
+            }
             dismiss();
             callback();
         });
@@ -70,6 +77,9 @@ ContextMenu::ContextMenu(
 }
 
 bool ContextMenu::focus() {
+    if (auto* initial = std::exchange(mInitialFocus, nullptr); initial && initial->focus()) {
+        return true;
+    }
     return mNavigation.focus() || Popover::focus();
 }
 

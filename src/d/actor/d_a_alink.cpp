@@ -55,8 +55,8 @@
 
 #if TARGET_PC
 #include "dusk/action_bindings.h"
-#include "dusk/interp/dual_buffer.h"
 #include "dusk/interp/frame_interpolation.h"
+#include "dusk/interp/sight.h"
 #include "dusk/settings.h"
 #include "res/Object/Alink.h"
 #include <cstring>
@@ -67,11 +67,10 @@ static const int HS_CHAIN_ANCHOR_COUNT = 4;
 
 namespace {
 struct AlinkInterp {
-    dusk::interp::DualBuffer<cXyz, IRON_BALL_CHAIN_COUNT> ib_pos;
-    dusk::interp::DualBuffer<csXyz, IRON_BALL_CHAIN_COUNT> ib_angle;
-    dusk::interp::DualBuffer<cXyz, 1> ib_hand;
-    cXyz hs_draw[HS_CHAIN_ANCHOR_COUNT];
-    dusk::interp::DualBuffer<cXyz, HS_CHAIN_ANCHOR_COUNT> hs_chain{hs_draw};
+    dusk::interp::Samples<cXyz> ib_pos;
+    dusk::interp::Samples<csXyz> ib_angle;
+    dusk::interp::Samples<cXyz> ib_hand;
+    dusk::interp::Samples<cXyz> hs_chain;
 };
 }  // namespace
 #endif
@@ -4329,9 +4328,7 @@ int daAlink_c::createHeap() {
         return 0;
     }
 
-    IF_DUSK(mFaceBckHeap.reserveBuffer(dRes_ID_ALANM_BCK_FAT_e);)
-    JKRReadIdxResource(mFaceBckHeap.getBuffer(), DUSK_IF_ELSE(mFaceBckHeap.getBufferSize(), 0xC00),
-                       dRes_ID_ALANM_BCK_FAT_e, dComIfGp_getAnmArchive());
+    JKRReadIdxResource(mFaceBckHeap.getBuffer(), 0xC00, dRes_ID_ALANM_BCK_FAT_e, dComIfGp_getAnmArchive());
     J3DAnmTransform* bck = (J3DAnmTransform*)J3DAnmLoaderDataBase::load(mFaceBckHeap.getBuffer());
     if (!mFaceBck.init(bck, FALSE, J3DFrameCtrl::EMode_LOOP, 1.0f, 0, -1, false)) {
         return 0;
@@ -14325,11 +14322,7 @@ BOOL daAlink_c::checkMagicArmorWearAbility() const {
 
 J3DModelData* daAlink_c::loadAramBmd(u16 i_resIdx, u32 i_bufSize) {
     JKRArchive* anmArchive = dComIfGp_getAnmArchive();
-#if TARGET_PC
-    u8* tmpBuffer = (u8*)mItemHeap[field_0x2fa0].allocTempBuffer(i_resIdx, &i_bufSize);
-#else
     u8* tmpBuffer = JKR_NEW_ARRAY_ARGS(u8, i_bufSize, 0x20);
-#endif
 
     JKRReadIdxResource(tmpBuffer, i_bufSize, i_resIdx, anmArchive);
     #if DEBUG
@@ -14350,11 +14343,7 @@ J3DModelData* daAlink_c::loadAramBmd(u16 i_resIdx, u32 i_bufSize) {
 }
 
 void* daAlink_c::loadAram(u16 i_resIdx, u32 i_bufSize) {
-#if TARGET_PC
-    u8* tmpBuffer = (u8*)mItemHeap[field_0x2fa0].allocTempBuffer(i_resIdx, &i_bufSize);
-#else
     u8* tmpBuffer = JKR_NEW_ARRAY_ARGS(u8, i_bufSize, 0x20);
-#endif
     JKRReadIdxResource(tmpBuffer, i_bufSize, i_resIdx, dComIfGp_getAnmArchive());
     #if DEBUG
     daPy_aramBufferCheck(tmpBuffer, i_bufSize);
@@ -19811,21 +19800,21 @@ int daAlink_c::draw() {
                 dComIfGd_getOpaListDark()->entryImm(mpHookChain, 0);
 
 #if TARGET_PC
-                if (dusk::interp::is_enabled()) {
+                if (dusk::interp::should_capture()) {
                     auto& interp = dusk::interp::get<AlinkInterp>(this);
                     if (mEquipItem == dItemNo_IRONBALL_e &&
                         mIronBallChainPos != NULL && mIronBallChainAngle != NULL)
                     {
-                        interp.ib_pos.writeback(mIronBallChainPos, IRON_BALL_CHAIN_COUNT);
-                        interp.ib_angle.writeback(mIronBallChainAngle, IRON_BALL_CHAIN_COUNT);
-                        interp.ib_hand.writeback(&mHookshotTopPos, 1);
+                        interp.ib_pos.capture(mIronBallChainPos, IRON_BALL_CHAIN_COUNT);
+                        interp.ib_angle.capture(mIronBallChainAngle, IRON_BALL_CHAIN_COUNT);
+                        interp.ib_hand.capture(&mHookshotTopPos, 1);
                     } else {
                         cXyz hsAnchors[HS_CHAIN_ANCHOR_COUNT];
                         hsAnchors[0] = mHookshotTopPos;
                         hsAnchors[1] = mHeldItemRootPos;
                         hsAnchors[2] = field_0x3810;
                         hsAnchors[3] = mIronBallBgChkPos;
-                        interp.hs_chain.capture_and_schedule(hsAnchors, HS_CHAIN_ANCHOR_COUNT);
+                        interp.hs_chain.capture(hsAnchors, HS_CHAIN_ANCHOR_COUNT);
                     }
                 }
 #endif

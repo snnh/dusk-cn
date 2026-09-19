@@ -3,12 +3,13 @@
 #include "bool_button.hpp"
 #include "controller_config.hpp"
 #include "graphics_tuner.hpp"
+#include "i18n.hpp"
 #include "menu_bar.hpp"
 #include "modal.hpp"
 #include "number_button.hpp"
 #include "pane.hpp"
 #include "prelaunch.hpp"
-#include "i18n.hpp"
+#include "saves_window.hpp"
 #include "touch_controls_editor.hpp"
 #include "ui.hpp"
 
@@ -164,6 +165,13 @@ constexpr std::array kAudioOutputModeNames = {
     "[SURROUND_7_1]",
 };
 
+constexpr std::array kLetterboxModes = {
+    "Off",
+    "On",
+    "Only During Gameplay",
+    "Only During Cutscenes",
+};
+
 constexpr std::array kTouchTargetingLabels = {
     "[HYBRID]",
     "[HOLD]",
@@ -185,6 +193,12 @@ constexpr std::array kMenuScalingModeLabels = {
     "[GAMECUBE]",
     "[WII]",
     "[DUSKLIGHT]",
+};
+
+constexpr std::array kAlwaysGreatspinModes = {
+    "Off",
+    "After Learning Skill",
+    "Always",
 };
 
 constexpr std::array kMagicArmorModes = {
@@ -334,10 +348,8 @@ class DataFolderPathText : public Component {
 public:
     explicit DataFolderPathText(Rml::Element* parent)
         : Component(append(parent, "data-folder-path")) {
-        auto* current = append(mRoot, "data-folder-current");
-        append_text(current, "[CURRENT_DATA_FOLDER]");
-        append(current, "br");
-        mPath = append(current, "data-folder-value");
+        append_text_element(mRoot, "small", "[CURRENT_DATA_FOLDER]");
+        mPath = append(mRoot, "file-path");
     }
 
     void update() override {
@@ -817,6 +829,7 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
                             });
                     }
                 });
+            add_save_files_control(leftPane, rightPane);
         });
     }
 
@@ -1032,6 +1045,38 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
                 .key = "[DISABLE_CUTSCENE_PILLARBOXING]",
                 .helpText = "[DISABLE_BLACK_BARS_ON_THE_LEFT_AND_RIGHT_SIDES_OF_THE_SCREEN_DURING_SOME]",
             });
+        leftPane.register_control(
+            leftPane.add_select_button({
+                .key = "Disable Letterboxing",
+                .getValue =
+                    [] {
+                        return kLetterboxModes[static_cast<u8>(getSettings().game.disableLetterboxing.getValue())];
+                    },
+                .isModified =
+                    [] {
+                        return getSettings().game.disableLetterboxing.getValue() !=
+                               getSettings().game.disableLetterboxing.getDefaultValue();
+                    },
+            }),
+            rightPane, [](Pane& pane) {
+                for (int i = 0; i < static_cast<int>(kLetterboxModes.size()); i++) {
+                    pane.add_button({
+                            .text = kLetterboxModes[i],
+                            .isSelected =
+                                [i] {
+                                    return getSettings().game.disableLetterboxing.getValue() == static_cast<LetterboxMode>(i);
+                                },
+                        })
+                        .on_pressed([i] {
+                            mDoAud_seStartMenu(kSoundItemChange);
+                            getSettings().game.disableLetterboxing.setValue(static_cast<LetterboxMode>(i));
+                            config::save();
+                        });
+                }
+                pane.add_rml(
+                    "<br/>Disable the top and bottom black bars during L-targeting, aiming, "
+                    "cutscenes, dialogue, etc.");
+            });
     });
 
     add_tab("[INPUT]", [this](Rml::Element* content) {
@@ -1237,7 +1282,7 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
                 }
             });
 
-        // TODO: Individual sliders for Main Music, Sub Music, Sound Effects, and Fanfare.
+        // TODO: Individual sliders for Sub Music, Sound Effects, and Fanfare.
         leftPane.add_section("[VOLUME]");
         leftPane.register_control(
             leftPane.add_child<NumberButton>(NumberButton::Props{
@@ -1260,6 +1305,27 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
             rightPane, [](Pane& pane) {
                 pane.clear();
                 pane.add_text("[ADJUSTS_THE_VOLUME_OF_ALL_SOUNDS_IN_THE_GAME]");
+            });
+        leftPane.register_control(
+            leftPane.add_child<NumberButton>(NumberButton::Props{
+                .key = "Main Music Volume",
+                .getValue = [] { return getSettings().audio.mainMusicVolume.getValue(); },
+                .setValue =
+                    [](int value) {
+                        getSettings().audio.mainMusicVolume.setValue(value);
+                        config::save();
+                    },
+                .isModified =
+                    [] {
+                        return getSettings().audio.mainMusicVolume.getValue() !=
+                               getSettings().audio.mainMusicVolume.getDefaultValue();
+                    },
+                .max = 100,
+                .suffix = "%",
+            }),
+            rightPane, [](Pane& pane) {
+                pane.clear();
+                pane.add_text("Adjusts the volume of all music in the game.");
             });
 
         leftPane.add_section("[EFFECTS]");
@@ -1356,6 +1422,8 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
             "[WALLET_SIZES_ARE_LIKE_IN_THE_HD_VERSION_500_1000_2000]");
         addOption("[DISABLE_RUPEE_CUTSCENES]", getSettings().game.disableRupeeCutscenes,
             "[RUPEES_WILL_NOT_PLAY_CUTSCENES_AFTER_YOU_HAVE_COLLECTED_THEM_THE_FIRST_T]");
+        addSpeedrunDisabledOption("[FASTER_SCENE_TRANSITIONS]", getSettings().game.fastTransitions,
+            "[REDUCES_HOW_LONG_THE_TRANSITIONS_TAKE_WHEN_CHANGING_MAPS]");
         addOption("[FASTER_CLIMBING]", getSettings().game.fastClimbing,
             "[QUICKER_CLIMBING_ON_LADDERS_AND_VINES_LIKE_THE_HD_VERSION]");
         addOption("[FASTER_TEARS_OF_LIGHT]", getSettings().game.fastTears,
@@ -1366,6 +1434,8 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
             "[SKIPS_THE_DELAY_WHEN_WRITING_TO_THE_MEMORY_CARD]");
         addOption("[HOLD_B_FOR_INSTANT_TEXT]", getSettings().game.instantText,
             "[MAKES_TEXT_SCROLL_IMMEDIATELY_BY_HOLDING_B]");
+        addSpeedrunDisabledOption("[HOLD_BUTTON_TO_MASH]", getSettings().game.holdToMash,
+            "[HOLD_THE_INDICATED_BUTTON_TO_MASH_AUTOMATICALLY]");
         addOption("[NO_CLIMBING_MISS_ANIMATION]", getSettings().game.noMissClimbing,
             "[PREVENTS_LINK_FROM_PLAYING_A_STRUGGLE_ANIMATION_WHEN_GRABBING_LEDGES_OR]");
         addOption("[NO_RUPEE_RETURNS]", getSettings().game.noReturnRupees,
@@ -1453,11 +1523,48 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
             "[CHEAT_NO_ITEM_TIMER_HELP]");
 
         leftPane.add_section("[ABILITIES]");
-        addCheat("[CHEAT_MOON_JUMP_R_A]", getSettings().game.moonJump, "[CHEAT_MOON_JUMP_R_A_HELP]");
+
+        addCheat(
+            "[CHEAT_MOON_JUMP_R_A]", getSettings().game.moonJump, "[CHEAT_MOON_JUMP_R_A_HELP]");
+        addCheat("[CHEAT_EASY_QUICK_SPIN_R_B]", getSettings().game.easyQuickSpin,
+            "[CHEAT_EASY_QUICK_SPIN_R_B_HELP]");
+
         addCheat("[CHEAT_SUPER_CLAWSHOT]", getSettings().game.superClawshot,
             "[CHEAT_SUPER_CLAWSHOT_HELP]");
-        addCheat("[CHEAT_ALWAYS_GREATSPIN]", getSettings().game.alwaysGreatspin,
-            "[CHEAT_ALWAYS_GREATSPIN_HELP]");
+        leftPane.register_control(
+            leftPane.add_select_button({
+                .key = "[CHEAT_ALWAYS_GREATSPIN]",
+                .getValue =
+                    [] {
+                        return kAlwaysGreatspinModes[static_cast<u8>(
+                            getSettings().game.alwaysGreatspin.getValue())];
+                    },
+                .isDisabled = [] { return dusk::speedrun::isActive(); },
+                .isModified =
+                    [] {
+                        return getSettings().game.alwaysGreatspin.getValue() !=
+                               getSettings().game.alwaysGreatspin.getDefaultValue();
+                    },
+            }),
+            rightPane, [](Pane& pane) {
+                for (int i = 0; i < static_cast<int>(kAlwaysGreatspinModes.size()); i++) {
+                    pane.add_button({
+                            .text = kAlwaysGreatspinModes[i],
+                            .isSelected =
+                                [i] {
+                                    return getSettings().game.alwaysGreatspin.getValue() ==
+                                           static_cast<AlwaysGreatspinMode>(i);
+                                },
+                        })
+                        .on_pressed([i] {
+                            mDoAud_seStartMenu(kSoundItemChange);
+                            getSettings().game.alwaysGreatspin.setValue(
+                                static_cast<AlwaysGreatspinMode>(i));
+                            config::save();
+                        });
+                }
+                pane.add_rml("<br/>[CHEAT_ALWAYS_GREATSPIN_HELP]");
+            });
         addCheat("[CHEAT_FAST_IRON_BOOTS]", getSettings().game.enableFastIronBoots,
             "[CHEAT_FAST_IRON_BOOTS_HELP]");
         addCheat("[CHEAT_CAN_TRANSFORM_ANYWHERE]", getSettings().game.canTransformAnywhere,

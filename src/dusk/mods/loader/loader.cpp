@@ -15,14 +15,15 @@
 #include "dusk/mod_loader.hpp"
 #include "dusk/mods/log_buffer.hpp"
 #include "dusk/mods/manifest.hpp"
-#include "dusk/mods/path.hpp"
 #include "dusk/mods/queue.hpp"
 #include "dusk/mods/svc/config.hpp"
 #include "dusk/mods/svc/hook.hpp"
 #include "dusk/mods/svc/registry.hpp"
+#include "dusk/mods/updates.hpp"
 #include "dusk/ui/mod_texture_provider.hpp"
 #include "dusk/ui/mods_window.hpp"
 #include "dusk/ui/ui.hpp"
+#include "dusk/utilities.hpp"
 
 #include <borealis/io.hpp>
 #include <borealis/update.hpp>
@@ -487,10 +488,12 @@ ModOperationHandle ModLoader::request_reload(std::string_view id) {
     return operation;
 }
 
-ModOperationHandle ModLoader::request_install(fs::path path) {
+ModOperationHandle ModLoader::request_install(
+    fs::path path, std::optional<UpdatePrecondition> update) {
     auto operation = std::make_shared<ModOperation>();
     m_pendingRequests.push_back(InstallRequest{
         .stagedPath = std::move(path),
+        .update = std::move(update),
         .operation = operation,
     });
     return operation;
@@ -979,7 +982,8 @@ ModLoader::OperationResult ModLoader::runtime_result(LoadedMod& mod) {
     return {.mod = &mod};
 }
 
-ModLoader::OperationResult ModLoader::install_staged(const fs::path& requestedPath) {
+ModLoader::OperationResult ModLoader::install_staged(
+    const fs::path& requestedPath, const std::optional<UpdatePrecondition>& update) {
     if (m_searchDirs.empty()) {
         return {
             .success = false,
@@ -1017,7 +1021,16 @@ ModLoader::OperationResult ModLoader::install_staged(const fs::path& requestedPa
         };
     }
 
-    const auto destination = userDir / fmt::format("{}.dusk", safe_filename(metadata.id));
+    if (update) {
+        if (metadata.id != update->modId || metadata.version != update->targetVersion) {
+            return {.success = false, .message = "The update package identity changed"};
+        }
+        if (auto reason = updates::validate(*update); !reason.empty()) {
+            return {.success = false, .message = std::move(reason)};
+        }
+    }
+
+    const auto destination = userDir / fmt::format("{}.dusk", utils::safe_filename(metadata.id));
     auto* installed = find_mod(metadata.id);
     if (installed != nullptr && !can_update(*installed)) {
         return {
@@ -1096,7 +1109,7 @@ void ModLoader::apply_pending_requests() {
     std::vector<LifecycleRequest> coalesced;
     for (const auto& request : requests) {
         if (const auto* install = std::get_if<InstallRequest>(&request)) {
-            auto result = install_staged(install->stagedPath);
+            auto result = install_staged(install->stagedPath, install->update);
             if (result.success && result.mod != nullptr) {
                 const auto& metadata = result.mod->metadata;
                 const std::string iconRml =

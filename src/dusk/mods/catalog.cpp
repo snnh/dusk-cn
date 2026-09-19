@@ -21,11 +21,12 @@ namespace {
 using json = nlohmann::json;
 using namespace std::chrono_literals;
 
-constexpr std::string_view catalogUrl =
-    "https://staging.twilitrealm.workers.dev/api/v1/games/dusklight/mods";
+constexpr std::string_view apiUrl = "https://twilitrealm.dev/api/v1/games/dusklight";
 
 std::string_view sort_value(Sort sort) noexcept {
     switch (sort) {
+    case Sort::Featured:
+        return "featured";
     case Sort::Endorsements:
         return "endorsements";
     case Sort::Updated:
@@ -88,7 +89,7 @@ void append_query(std::string& url, std::string_view name, std::string_view valu
 }
 
 std::string make_url(const Query& query) {
-    std::string url{catalogUrl};
+    std::string url{fmt::format("{}/mods", apiUrl)};
     if (!query.search.empty()) {
         append_query(url, "q", query.search);
     }
@@ -103,11 +104,14 @@ std::string make_url(const Query& query) {
             append_query(url, "platform", platform);
         }
     }
+    if (!query.includeNatives) {
+        append_query(url, "include_natives", "false");
+    }
     return url;
 }
 
 std::string make_detail_url(std::string_view id) {
-    return fmt::format("{}/{}", catalogUrl, url_encode(id));
+    return fmt::format("{}/{}", fmt::format("{}/mods", apiUrl), url_encode(id));
 }
 
 const json& required_field(const json& object, const char* name) {
@@ -119,6 +123,14 @@ const json& required_field(const json& object, const char* name) {
         throw std::runtime_error{fmt::format("missing field '{}'", name)};
     }
     return *iter;
+}
+
+const json& required_array(const json& object, const char* name) {
+    const auto& value = required_field(object, name);
+    if (!value.is_array()) {
+        throw std::runtime_error{fmt::format("field '{}' is not an array", name)};
+    }
+    return value;
 }
 
 std::string required_string(const json& object, const char* name) {
@@ -178,6 +190,40 @@ uint16_t required_u16(const json& object, const char* name) {
     return static_cast<uint16_t>(value);
 }
 
+std::optional<uint32_t> optional_u32(const json& object, const char* name) {
+    if (required_field(object, name).is_null()) {
+        return std::nullopt;
+    }
+    const auto value = required_count(object, name);
+    if (value > std::numeric_limits<uint32_t>::max()) {
+        throw std::runtime_error{fmt::format("field '{}' is too large", name)};
+    }
+    return static_cast<uint32_t>(value);
+}
+
+Download parse_download(const json& value) {
+    return {
+        .url = required_string(value, "url"),
+        .sha256 = required_string(value, "sha256"),
+        .size = required_count(value, "size"),
+    };
+}
+
+std::vector<ServiceImport> parse_service_imports(const json& object) {
+    const auto& imports = required_array(object, "service_imports");
+    std::vector<ServiceImport> result;
+    result.reserve(imports.size());
+    for (const auto& service : imports) {
+        result.push_back({
+            .id = required_string(service, "id"),
+            .major = required_u16(service, "major"),
+            .minMinor = required_u16(service, "min_minor"),
+            .optional = required_bool(service, "optional"),
+        });
+    }
+    return result;
+}
+
 Image parse_image(const json& value) {
     const auto width = required_count(value, "width");
     const auto height = required_count(value, "height");
@@ -190,10 +236,7 @@ Image parse_image(const json& value) {
         .width = static_cast<uint32_t>(width),
         .height = static_cast<uint32_t>(height),
     };
-    const auto& sources = required_field(value, "sources");
-    if (!sources.is_array()) {
-        throw std::runtime_error{"field 'sources' is not an array"};
-    }
+    const auto& sources = required_array(value, "sources");
     image.sources.reserve(sources.size());
     for (const auto& source : sources) {
         const auto sourceWidth = required_count(source, "width");
@@ -261,19 +304,13 @@ Mod parse_mod(const json& value) {
         mod.category = parse_mod_category(category);
     }
 
-    const auto& tags = required_field(value, "tags");
-    if (!tags.is_array()) {
-        throw std::runtime_error{"field 'tags' is not an array"};
-    }
+    const auto& tags = required_array(value, "tags");
     mod.tags.reserve(tags.size());
     for (const auto& tag : tags) {
         mod.tags.push_back(parse_tag(tag));
     }
 
-    const auto& platforms = required_field(value, "supported_platforms");
-    if (!platforms.is_array()) {
-        throw std::runtime_error{"field 'supported_platforms' is not an array"};
-    }
+    const auto& platforms = required_array(value, "supported_platforms");
     mod.supportedPlatforms.reserve(platforms.size());
     for (const auto& platform : platforms) {
         if (!platform.is_string()) {
@@ -302,31 +339,11 @@ Detail parse_detail(std::string_view body) {
         .license = optional_string(root, "license"),
         .descriptionHtml = required_string(root, "description_html"),
         .changelogHtml = required_string(root, "changelog_html"),
+        .download = parse_download(required_field(root, "download")),
+        .modAbi = optional_u32(root, "mod_abi"),
     };
 
-    const auto& download = required_field(root, "download");
-    if (!download.is_object()) {
-        throw std::runtime_error{"field 'download' is not an object"};
-    }
-    detail.download = {
-        .url = required_string(download, "url"),
-        .sha256 = required_string(download, "sha256"),
-        .size = required_count(download, "size"),
-    };
-
-    const auto& modAbi = required_field(root, "mod_abi");
-    if (!modAbi.is_null()) {
-        const auto value = required_count(root, "mod_abi");
-        if (value > std::numeric_limits<uint32_t>::max()) {
-            throw std::runtime_error{"field 'mod_abi' is too large"};
-        }
-        detail.modAbi = static_cast<uint32_t>(value);
-    }
-
-    const auto& screenshots = required_field(root, "screenshots");
-    if (!screenshots.is_array()) {
-        throw std::runtime_error{"field 'screenshots' is not an array"};
-    }
+    const auto& screenshots = required_array(root, "screenshots");
     detail.screenshots.reserve(screenshots.size());
     for (const auto& screenshot : screenshots) {
         detail.screenshots.push_back({
@@ -335,19 +352,7 @@ Detail parse_detail(std::string_view body) {
         });
     }
 
-    const auto& imports = required_field(root, "service_imports");
-    if (!imports.is_array()) {
-        throw std::runtime_error{"field 'service_imports' is not an array"};
-    }
-    detail.serviceImports.reserve(imports.size());
-    for (const auto& import : imports) {
-        detail.serviceImports.push_back({
-            .id = required_string(import, "id"),
-            .major = required_u16(import, "major"),
-            .minMinor = required_u16(import, "min_minor"),
-            .optional = required_bool(import, "optional"),
-        });
-    }
+    detail.serviceImports = parse_service_imports(root);
     return detail;
 }
 
@@ -359,19 +364,13 @@ Page parse_page(std::string_view body) {
     }
 
     Page page;
-    const auto& categories = required_field(root, "categories");
-    if (!categories.is_array()) {
-        throw std::runtime_error{"field 'categories' is not an array"};
-    }
+    const auto& categories = required_array(root, "categories");
     page.categories.reserve(categories.size());
     for (const auto& category : categories) {
         page.categories.push_back(parse_category(category));
     }
 
-    const auto& mods = required_field(root, "mods");
-    if (!mods.is_array()) {
-        throw std::runtime_error{"field 'mods' is not an array"};
-    }
+    const auto& mods = required_array(root, "mods");
     page.mods.reserve(mods.size());
     for (const auto& mod : mods) {
         page.mods.push_back(parse_mod(mod));
@@ -437,6 +436,7 @@ borealis::http::Request make_request(std::string url) {
         .headers =
             {
                 {.name = "User-Agent", .value = borealis::user_agent(dusk::AppInfo)},
+                {.name = "X-Dusklight-Version", .value = BOREALIS_APP_VERSION},
                 {.name = "Accept", .value = "application/json"},
             },
         .connectTimeout = 10s,
@@ -453,6 +453,172 @@ borealis::Task<FetchResult> fetch_page(Query query) {
 
 borealis::Task<DetailFetchResult> fetch_detail(std::string id) {
     return borealis::http::start(make_request(make_detail_url(id))).map(finish_detail_request);
+}
+
+std::string_view platform() noexcept {
+    return catalog_platform();
+}
+
+bool supports_native_installs() noexcept {
+#if defined(__APPLE__) && (TARGET_OS_IOS || TARGET_OS_TV)
+    // Native libraries must be bundled and signed with the app.
+    return false;
+#else
+    return true;
+#endif
+}
+
+borealis::Task<UpdateFetchResult> fetch_updates(
+    UpdateEnvironment environment, std::vector<std::string> targets) {
+    json platformValue = environment.platform;
+    if (environment.platform.empty()) {
+        platformValue = nullptr;
+    }
+    json body{
+        {"app_version", BOREALIS_APP_VERSION},
+        {"platform", platformValue},
+        {"include_natives", supports_native_installs()},
+        {"mod_abi", environment.abi},
+        {"targets", targets},
+        {"services", json::array()},
+        {"mods", json::array()},
+    };
+    for (const auto& service : environment.services) {
+        json provider = service.providerId;
+        if (service.providerId.empty()) {
+            provider = nullptr;
+        }
+        body["services"].push_back({
+            {"id", service.id},
+            {"major", service.major},
+            {"minor", service.minor},
+            {"provider_mod_id", provider},
+        });
+    }
+    for (const auto& mod : environment.mods) {
+        json imports = json::array();
+        for (const auto& service : mod.imports) {
+            imports.push_back({
+                {"id", service.id},
+                {"major", service.major},
+                {"min_minor", service.minMinor},
+            });
+        }
+        body["mods"].push_back({
+            {"id", mod.id},
+            {"version", mod.version},
+            {"enabled", mod.enabled},
+            {"required_imports", std::move(imports)},
+        });
+    }
+    auto request = make_request(fmt::format("{}/update-check", apiUrl));
+    request.method = borealis::http::Method::Post;
+    request.headers.push_back({"Content-Type", "application/json"});
+    request.body = body.dump();
+    request.maxBodyBytes = 8 * 1024 * 1024;
+    return borealis::http::start(std::move(request))
+        .map([environment = std::move(environment), targets = std::move(targets)](
+                 borealis::http::Result result) -> UpdateFetchResult {
+            if (result.error != borealis::http::Error::None) {
+                return {
+                    .error =
+                        result.message.empty() ? "Could not check mod updates." : result.message,
+                    .retryable = result.error == borealis::http::Error::Network ||
+                                 result.error == borealis::http::Error::Timeout,
+                };
+            }
+            if (result.response.statusCode != 200) {
+                int retryAfter = 0;
+                for (const auto& header : result.response.headers) {
+                    if (header.name == "Retry-After" || header.name == "retry-after") {
+                        try {
+                            retryAfter = std::clamp(std::stoi(header.value), 0, 3600);
+                        } catch (...) {
+                        }
+                    }
+                }
+                return {
+                    .error = api_error(result.response),
+                    .retryable =
+                        result.response.statusCode == 429 || result.response.statusCode >= 500,
+                    .retryAfter = retryAfter,
+                };
+            }
+            try {
+                const auto root = json::parse(result.response.body);
+                const auto& rows = required_field(root, "mods");
+                if (!rows.is_array() || rows.size() != targets.size()) {
+                    throw std::runtime_error{"Incomplete update response"};
+                }
+                std::vector<ModUpdate> updates;
+                for (const auto& row : rows) {
+                    ModUpdate update{
+                        .id = required_string(row, "id"),
+                        .installedVersion = required_string(row, "installed_version"),
+                        .published = required_bool(row, "published"),
+                        .yankedInstalled = required_bool(row, "yanked_installed"),
+                    };
+                    const auto installed =
+                        std::ranges::find(environment.mods, update.id, &InstalledPackage::id);
+                    if (std::ranges::find(targets, update.id) == targets.end() ||
+                        std::ranges::find(updates, update.id, &ModUpdate::id) != updates.end() ||
+                        installed == environment.mods.end() ||
+                        installed->version != update.installedVersion)
+                    {
+                        throw std::runtime_error{
+                            "Update response does not match the installed inventory"};
+                    }
+                    const auto& latest = required_field(row, "latest");
+                    if (!latest.is_null()) {
+                        update.latestVersion = required_string(latest, "version");
+                        const auto& blockers = required_field(latest, "blockers");
+                        if (!blockers.is_array()) {
+                            throw std::runtime_error{"Invalid blockers"};
+                        }
+                        for (const auto& blocker : blockers) {
+                            update.blockers.push_back(required_string(blocker, "message"));
+                        }
+                    }
+                    const auto& target = required_field(row, "latest_compatible");
+                    if (!target.is_null()) {
+                        UpdateTarget parsed;
+                        parsed.version = required_string(target, "version");
+                        parsed.changelogHtml = required_string(target, "changelog_html");
+                        parsed.download = parse_download(required_field(target, "download"));
+                        auto& compatibility = parsed.compatibility;
+                        compatibility.containsNativeCode =
+                            required_bool(target, "contains_native_code");
+                        compatibility.platforms = required_field(target, "supported_platforms")
+                                                      .get<std::vector<std::string>>();
+                        compatibility.abi = optional_u32(target, "mod_abi");
+                        compatibility.imports = parse_service_imports(target);
+                        const auto& exports = required_array(target, "service_exports");
+                        for (const auto& service : exports) {
+                            compatibility.exports.push_back({
+                                required_string(service, "id"),
+                                required_u16(service, "major"),
+                                required_u16(service, "minor"),
+                                {},
+                            });
+                        }
+                        if (!parsed.download.url.starts_with("https://") ||
+                            parsed.download.size == 0 || parsed.download.sha256.size() != 64 ||
+                            !std::ranges::all_of(parsed.download.sha256,
+                                [](char c) {
+                                    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+                                }))
+                        {
+                            throw std::runtime_error{"Invalid update download"};
+                        }
+                        update.target = std::move(parsed);
+                    }
+                    updates.push_back(std::move(update));
+                }
+                return {.updates = std::move(updates)};
+            } catch (const std::exception& error) {
+                return {.error = fmt::format("Invalid mod update response: {}", error.what())};
+            }
+        });
 }
 
 }  // namespace dusk::mods::catalog

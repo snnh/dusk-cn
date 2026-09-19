@@ -99,6 +99,12 @@ borealis::data::Manager& manager() {
                             "USA",
                             "EUR",
                             "JAP",
+                            "MemoryCardA.USA.raw.mods",
+                            "MemoryCardA.EUR.raw.mods",
+                            "MemoryCardA.JAP.raw.mods",
+                            "MemoryCardB.USA.raw.mods",
+                            "MemoryCardB.EUR.raw.mods",
+                            "MemoryCardB.JAP.raw.mods",
                         },
                     .files =
                         {

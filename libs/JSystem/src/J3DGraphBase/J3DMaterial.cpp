@@ -4,6 +4,10 @@
 #include "JSystem/J3DGraphBase/J3DMaterial.h"
 #include "JSystem/JKernel/JKRHeap.h"
 
+#if TARGET_PC
+#include "JSystem/J3DGraphAnimator/J3DMaterialAnm.h"
+#endif
+
 J3DColorBlock* J3DMaterial::createColorBlock(u32 flags) {
     J3DColorBlock* rv = NULL;
     switch (flags) {
@@ -218,6 +222,9 @@ void J3DMaterial::makeSharedDisplayList() {
 
 void J3DMaterial::load() {
     j3dSys.setMaterialMode(mMaterialMode);
+#if TARGET_PC
+    mTevBlock->loadTexture();
+#endif
     if (!j3dSys.checkFlag(2)) {
         loadNBTScale(*mTexGenBlock->getNBTScale());
     }
@@ -225,6 +232,9 @@ void J3DMaterial::load() {
 
 void J3DMaterial::loadSharedDL() {
     j3dSys.setMaterialMode(mMaterialMode);
+#if TARGET_PC
+    mTevBlock->loadTexture();
+#endif
     if (!j3dSys.checkFlag(2)) {
         mSharedDLObj->callDL();
         loadNBTScale(*mTexGenBlock->getNBTScale());
@@ -367,6 +377,9 @@ s32 J3DMaterial::newSingleSharedDisplayList(u32 dlSize) {
 
 #if TARGET_PC
 bool J3DMaterial::needsInterpCallBack() const {
+    if (mMaterialAnm != nullptr && mMaterialAnm->hasMaterialAnimation()) {
+        return true;
+    }
     for (int i = 0, n = getTexGenNum(); i < n; i++) {
         J3DTexMtx* pTexMtx = mTexGenBlock->getTexMtx(i);
         if (pTexMtx != NULL) {
@@ -399,6 +412,9 @@ void J3DPatchedMaterial::makeSharedDisplayList() {}
 
 void J3DPatchedMaterial::load() {
     j3dSys.setMaterialMode(mMaterialMode);
+#if TARGET_PC
+    mTevBlock->loadTexture();
+#endif
     if (j3dSys.checkFlag(2)) {
         return;
     }
@@ -406,6 +422,9 @@ void J3DPatchedMaterial::load() {
 
 void J3DPatchedMaterial::loadSharedDL() {
     j3dSys.setMaterialMode(mMaterialMode);
+#if TARGET_PC
+    mTevBlock->loadTexture();
+#endif
     if (!j3dSys.checkFlag(0x02))
         mSharedDLObj->callDL();
 }
@@ -424,6 +443,9 @@ void J3DLockedMaterial::makeSharedDisplayList() {}
 
 void J3DLockedMaterial::load() {
     j3dSys.setMaterialMode(mMaterialMode);
+#if TARGET_PC
+    mTevBlock->loadTexture();
+#endif
     if (j3dSys.checkFlag(2)) {
         return;
     }
@@ -431,6 +453,9 @@ void J3DLockedMaterial::load() {
 
 void J3DLockedMaterial::loadSharedDL() {
     j3dSys.setMaterialMode(mMaterialMode);
+#if TARGET_PC
+    mTevBlock->loadTexture();
+#endif
     if (!j3dSys.checkFlag(0x02))
         mSharedDLObj->callDL();
 }

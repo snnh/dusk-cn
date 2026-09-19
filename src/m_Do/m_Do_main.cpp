@@ -288,7 +288,6 @@ void main01(void) {
         if (timing.separatePresentation) {
             if (timing.numSimTicks > 0) {
                 dusk::interp::begin_frame(0.0f);
-                dusk::interp::set_ui_tick_pending(true);
                 for (int i = 0; i < timing.numSimTicks; ++i) {
                     if (timing.interpolating) {
                         dusk::interp::begin_sim_tick();
@@ -310,10 +309,8 @@ void main01(void) {
             fpcM_DrawIterater((fpcM_DrawIteraterFunc)fpcM_Draw);
             cAPIGph_Painter();
             dusk::interp::end_presentation();
-            dusk::interp::set_ui_tick_pending(false);
         } else {
             dusk::interp::begin_frame(0.0f);
-            dusk::interp::set_ui_tick_pending(true);
             dusk::game_clock::begin_sim_tick();
 
             // Game Inputs

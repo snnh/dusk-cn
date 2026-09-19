@@ -154,10 +154,69 @@ std::optional<std::string> normalize_module_path(
         }
         normalized.append(part);
     }
-    if (!normalized.ends_with(".luau")) {
-        normalized += ".luau";
-    }
+
     return normalized;
+}
+
+std::optional<std::string> try_load_direct_lua_files(lua_State* state, ModContext* mod, char const* modName, std::string const& fileWithoutExt) {
+    // Try .luau first.
+    auto try_luau = fileWithoutExt + ".luau";
+    std::optional<std::string> found_path;
+    if (svc_resource->file_exists(mod, try_luau.c_str())) {
+        found_path = try_luau;
+    }
+
+    // Try .lua, if both it and .luau exist, there's a conflict.
+    auto try_lua = fileWithoutExt + ".lua";
+    if (svc_resource->file_exists(mod, try_lua.c_str())) {
+        if (found_path.has_value()) {
+            luaL_error(state, "Cannot load module '%s' if both '%s' and '%s' exist", modName, try_luau.c_str(), try_lua.c_str());
+        }
+
+        found_path = try_lua;
+    }
+
+    return found_path;
+}
+
+std::string resolve_module_path(lua_State* state, ModContext* mod, std::string_view currentPath, std::string_view requested) {
+    // For reference: https://github.com/luau-lang/rfcs/blob/79c722717ffd96e5c5b5a9493ff01fda8a5171be/docs/amended-require-resolution.md
+
+    // Normalize to remove ./ and ../ and such. Should be a path relative to res/ after this.
+    auto normalized = normalize_module_path(currentPath, requested);
+    if (!normalized.has_value()) {
+        luaL_error(state, "module paths must be relative and remain inside the mod's res directory");
+    }
+
+    auto has_lua_ext = normalized->ends_with(".lua") || normalized->ends_with(".luau");
+    if (has_lua_ext) {
+        // No fancy logic in this case.
+        if (!svc_resource->file_exists(mod, normalized->c_str())) {
+            luaL_error(state, "Cannot load '%s': file does not exist", normalized->c_str());
+        }
+
+        return std::move(*normalized);
+    }
+
+    auto found_path = try_load_direct_lua_files(state, mod, normalized->c_str(), *normalized);
+    if (found_path.has_value()) {
+        // If a .lua(u) file *and* a matching directory exist, it's a conflict.
+        if (svc_resource->directory_exists(mod, normalized->c_str())) {
+            luaL_error(state, "Cannot load '%s' because conflicting directory '%s' also exists", found_path->c_str(), normalized->c_str());
+        }
+    } else {
+        // Check for directory/init.lua(u)
+        auto initPath = *normalized + "/init";
+
+        found_path = try_load_direct_lua_files(state, mod, normalized->c_str(), initPath);
+    }
+
+    if (!found_path.has_value()) {
+        luaL_error(state, "Cannot load '%s': unable to locate '%s.lua(u)' or '%s/init.lua(u)'",
+            found_path->c_str(), normalized->c_str(), normalized->c_str());
+    }
+
+    return std::move(*found_path);
 }
 
 int module_require(lua_State* state);
@@ -256,13 +315,7 @@ int module_require(lua_State* state) {
         }
     } else {
         const char* currentPath = lua_tostring(state, lua_upvalueindex(2));
-        const auto normalized =
-            normalize_module_path(currentPath != nullptr ? currentPath : "main.luau", requested);
-        if (!normalized.has_value()) {
-            luaL_error(
-                state, "module paths must be relative and remain inside the mod's res directory");
-        }
-        moduleName = *normalized;
+        moduleName = resolve_module_path(state, vm.subject, currentPath != nullptr ? currentPath : "main.luau", requested);
     }
 
     if (const auto found = vm.moduleRefs.find(moduleName); found != vm.moduleRefs.end()) {

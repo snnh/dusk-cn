@@ -29,6 +29,7 @@
 #include "dusk/game_clock.h"
 #include "dusk/interp/frame_interpolation.h"
 #include "dusk/interp/line.h"
+#include "dusk/interp/material.h"
 #include "dusk/logging.h"
 #include "dusk/version.hpp"
 #endif
@@ -147,6 +148,7 @@ int mDoExt_bpkAnm::init(J3DMaterialTable* i_matTable, J3DAnmColor* i_bpk, int i_
                         int i_attribute, f32 i_rate, s16 i_startF, s16 i_endF) {
     JUT_ASSERT(371, (i_anmPlay == FALSE || getFrameCtrl() != NULL || isCurrentSolidHeap()) && i_matTable != NULL && i_bpk != NULL);
 
+    IF_DUSK(dusk::interp::material::reset(getFrameCtrl()));
     mpAnm = i_bpk;
     mpAnm->searchUpdateMaterialID(i_matTable);
 
@@ -160,6 +162,7 @@ int mDoExt_bpkAnm::init(J3DMaterialTable* i_matTable, J3DAnmColor* i_bpk, int i_
 
 void mDoExt_bpkAnm::entry(J3DMaterialTable* i_matTable, f32 i_frame) {
     mpAnm->setFrame(i_frame);
+    IF_DUSK(dusk::interp::material::bind(mpAnm, getFrameCtrl()));
     i_matTable->entryMatColorAnimator(mpAnm);
 }
 
@@ -186,6 +189,7 @@ int mDoExt_btkAnm::init(J3DMaterialTable* i_matTable, J3DAnmTextureSRTKey* i_btk
                         int i_attribute, f32 i_rate, s16 i_startF, s16 i_endF) {
     JUT_ASSERT(468, (i_anmPlay == FALSE || getFrameCtrl() != NULL || isCurrentSolidHeap()) && i_matTable != NULL && i_btk != NULL);
 
+    IF_DUSK(dusk::interp::material::reset(getFrameCtrl()));
     mpAnm = i_btk;
     mpAnm->searchUpdateMaterialID(i_matTable);
 
@@ -198,6 +202,7 @@ int mDoExt_btkAnm::init(J3DMaterialTable* i_matTable, J3DAnmTextureSRTKey* i_btk
 
 void mDoExt_btkAnm::entry(J3DMaterialTable* i_matTable, f32 i_frame) {
     mpAnm->setFrame(i_frame);
+    IF_DUSK(dusk::interp::material::bind(mpAnm, getFrameCtrl()));
     i_matTable->entryTexMtxAnimator(mpAnm);
 }
 
@@ -205,6 +210,7 @@ int mDoExt_brkAnm::init(J3DMaterialTable* i_matTable, J3DAnmTevRegKey* i_brk, in
                         int i_attribute, f32 i_rate, s16 i_startF, s16 i_endF) {
     JUT_ASSERT(516, (i_anmPlay == FALSE || getFrameCtrl() != NULL || isCurrentSolidHeap()) && i_matTable != NULL && i_brk != NULL);
 
+    IF_DUSK(dusk::interp::material::reset(getFrameCtrl()));
     mpAnm = i_brk;
     mpAnm->searchUpdateMaterialID(i_matTable);
 
@@ -217,6 +223,7 @@ int mDoExt_brkAnm::init(J3DMaterialTable* i_matTable, J3DAnmTevRegKey* i_brk, in
 
 void mDoExt_brkAnm::entry(J3DMaterialTable* i_matTable, f32 i_frame) {
     mpAnm->setFrame(i_frame);
+    IF_DUSK(dusk::interp::material::bind(mpAnm, getFrameCtrl()));
     i_matTable->entryTevRegAnimator(mpAnm);
 }
 
@@ -4067,3 +4074,15 @@ static void dummy() {
     { J3DFog temp; temp = temp; J3DFog temp2(temp); }
     { J3DTexMtx temp; temp = temp; J3DTexMtx temp2(temp); }
 }
+
+#if TARGET_PC
+void mDoExt_btkAnm::entryFrame(f32 frame) {
+    mpAnm->setFrame(frame);
+    IF_DUSK(dusk::interp::material::bind(mpAnm, getFrameCtrl()));
+}
+
+void mDoExt_brkAnm::entryFrame(f32 frame) {
+    mpAnm->setFrame(frame);
+    IF_DUSK(dusk::interp::material::bind(mpAnm, getFrameCtrl()));
+}
+#endif

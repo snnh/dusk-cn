@@ -79,7 +79,6 @@ public:
     virtual ~J3DModel() {}
 
 #if TARGET_PC
-    static void interp_callback(void* pUserWork);
     void calc_presentation_base_mtx();
     void prepare_presentation_view();
 #endif
@@ -109,6 +108,7 @@ public:
     Vec* getBaseScale() { return &mBaseScale; }
 #if TARGET_PC
     void setAnmMtx(int jointNo, Mtx m);
+    void forgetMtx();
 #else
     void setAnmMtx(int jointNo, Mtx m) {
         mMtxBuffer->setAnmMtx(jointNo, m);

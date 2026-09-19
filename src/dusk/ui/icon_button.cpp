@@ -22,11 +22,16 @@ const char* material_icon(std::string_view name) {
         {"refresh", "\uE5D5"},
         {"file_download", "\uE2C4"},
         {"download", "\uF090"},
+        {"sim_card_download", "\uF068"},
+        {"indeterminate_question_box", "\uF56D"},
         {"schedule", "\uE8B5"},
         {"warning", "\uE002"},
         {"check_circle", "\uE86C"},
         {"favorite", "\uE87D"},
         {"arrow_back", "\uE5C4"},
+        {"arrow_forward", "\uE5C8"},
+        {"expand_less", "\uE5CE"},
+        {"expand_more", "\uE5CF"},
         {"open_in_new", "\uE89E"},
         {"settings", "\uE8B8"},
         {"folder_open", "\uE2C8"},
@@ -51,20 +56,40 @@ const char* material_icon(std::string_view name) {
 }
 
 IconButton::IconButton(Rml::Element* parent, Props props)
-    : ControlledButton{parent, ControlledButton::Props{.text = "",
+    : ControlledButton{parent, ControlledButton::Props{
+                                   .text = "",
                                    .isSelected = std::move(props.isSelected),
-                                   .isDisabled = std::move(props.isDisabled)}},
-      mTooltip{mRoot, props.label} {
+                                   .isDisabled = std::move(props.isDisabled),
+                               }} {
     mRoot->SetClass("icon-button", true);
-    mRoot->SetAttribute("aria-label", props.label);
-    auto* icon = append(mRoot, "icon");
-    icon->SetAttribute("aria-hidden", "true");
-    append_text(icon, material_icon(props.icon));
+    set_label(props.label);
+    mIcon = append(mRoot, "icon");
+    mIcon->SetAttribute("aria-hidden", "true");
+    set_icon(props.icon);
 }
 
-void IconButton::update() {
-    ControlledButton::update();
-    mTooltip.update();
+void IconButton::set_icon(std::string_view icon) {
+    if (mIconName == icon) {
+        return;
+    }
+    mIconName = icon;
+    set_text_content(mIcon, material_icon(icon));
+}
+
+void IconButton::set_label(const Rml::String& label) {
+    if (mLabel == label) {
+        return;
+    }
+    mRoot->SetAttribute("aria-label", label);
+    mLabel = label;
+    if (mTooltipText.empty()) {
+        Component::set_tooltip(label);
+    }
+}
+
+void IconButton::set_tooltip(const Rml::String& text) {
+    mTooltipText = text;
+    Component::set_tooltip(text.empty() ? mLabel : text);
 }
 
 }  // namespace dusk::ui

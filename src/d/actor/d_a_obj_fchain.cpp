@@ -13,10 +13,13 @@
 #include <cstring>
 
 #if TARGET_PC
-#include "dusk/interp/dual_buffer.h"
+#include "dusk/interp/samples.h"
 
 static const int CHAIN_COUNT = 22;
-typedef dusk::interp::DualBuffer<cXyz, CHAIN_COUNT> ChainInterp;
+struct ChainInterp {
+    dusk::interp::Samples<cXyz> positions;
+    dusk::interp::Samples<csXyz> angles;
+};
 #endif
 
 static char const l_arcName[] = "Fchain";
@@ -257,6 +260,17 @@ void daObjFchain_shape_c::draw() {
     daObjFchain_c* i_this = (daObjFchain_c*)getUserArea();
     cXyz* pPos = i_this->getPos();
     csXyz* pAngle = i_this->getAngle();
+#if TARGET_PC
+    cXyz positions[CHAIN_COUNT];
+    csXyz angles[CHAIN_COUNT];
+    auto& samples = dusk::interp::get<ChainInterp>(i_this);
+    for (int i = 0; i < CHAIN_COUNT; ++i) {
+        positions[i] = samples.positions.read(i, pPos[i]);
+        angles[i] = samples.angles.read(i, pAngle[i]);
+    }
+    pPos = positions;
+    pAngle = angles;
+#endif
     J3DModelData* modelData = i_this->getModelData();
     J3DMaterial* material = modelData->getMaterialNodePointer(0);
     dKy_tevstr_c* tevStr = &i_this->tevStr;
@@ -305,7 +319,11 @@ int daObjFchain_c::draw() {
         }
         dComIfGd_getOpaListDark()->entryImm(&mShape, 0);
 
-        IF_DUSK(dusk::interp::get<ChainInterp>(this).writeback(field_0x694, CHAIN_COUNT));
+#if TARGET_PC
+        auto& samples = dusk::interp::get<ChainInterp>(this);
+        samples.positions.capture(getPos(), CHAIN_COUNT);
+        samples.angles.capture(getAngle(), CHAIN_COUNT);
+#endif
     }
     return 1;
 }
